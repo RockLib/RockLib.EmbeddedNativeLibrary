@@ -6,7 +6,7 @@ Consuming native DLLs (usually C libraries) can be tricky in .NET - especially w
 Problem
 --------
 
-The "normal" way to use a native DLL is to declare an `extern` function, also known as P/Invoke. Like this:
+The "normal" way to use a native DLL is to declare an `extern` function, also known as P/Invoke, like this:
 
 ```c#
 [DllImport("libsodium.dll", EntryPoint = "sodium_init", CallingConvention = CallingConvention.Cdecl)]
@@ -15,7 +15,7 @@ private static extern void SodiumInit();
 
 Since `libsodium.dll` is not part of the operating system (like `kernel32.dll` or `user32.dll`), the DLL file will need to be in the same directory as the assembly where the extern function is defined - just like a .NET DLL. However, unlike a .NET DLL, a native DLL cannot be referenced by a .NET project. The implications of this difference are significant.
 
-Since the native DLL cannot be referenced by a .NET project, it isn't recognized by MSBuild or other build tools. That means that the native DLL won't be copied to a build's output directory. Which means that the application will fail when it tries to invoke the extern function.
+Since the native DLL cannot be referenced by a .NET project, it isn't recognized by MSBuild or other build tools. That means that the native DLL won't be copied to a build's output directory. This means that the application will fail when it tries to invoke the extern function.
 
 Solution
 --------
@@ -24,7 +24,7 @@ Solution
 2. Add the native DLL to the project as an [embedded resource](https://support.microsoft.com/en-us/kb/319292).
 3. Create an instance of `EmbeddedNativeLibrary`, and call its `GetDelegate` method to obtain a delegate that invokes that native function.
 
-1 and 2 are pretty self-explanatory. But 3... not so much. An example should help. This class exposes libsodium's `crypto_secretbox` method (the numbers refer to the descriptions below):
+1 and 2 are pretty self-explanatory. But 3... not so much. An example should help. The following class exposes libsodium's `crypto_secretbox` method (the numbers refer to the descriptions below):
 
 ```c#
 public static class Sodium
