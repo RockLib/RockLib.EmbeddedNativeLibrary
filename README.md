@@ -51,9 +51,10 @@ public static class Sodium
 There are several things going on here.
 
 1. Declare a non-generic delegate that match the native function's signature.
-  - You'll get a run-time error if you try to use a generic delegate.
-2. Decorate that delegate with the `[UnmanagedFunctionPointer(CallingConvention.Cdecl)]` attribute.
-  - You'll get a run-time error if you don't decorate the delegate with this attribute.
+  - You'll get a run-time error if you try to use a generic delegate. (Why? See the Exceptions section in [this MSDN article](https://msdn.microsoft.com/en-us/library/vstudio/zdx6dyyh.aspx) for details.)
+2. Decorate that delegate with an `[UnmanagedFunctionPointer]` attribute.
+  - You may get a run-time error if you don't decorate the delegate with this attribute.
+  - You'll need to know the calling convention of the native function (libsodium in the example uses the CDECL calling convention).
 3. Create an instance of `EmbeddedNativeLibrary`, passing it the name of the library, and the name of the resource.
   - There is another constructor that allows you to choose the "correct" resource. This is useful for differentiating between 32-bit and 64-bit native DLLs.
 4. Call the `GetDelegate` method, caching the resulting delegate in a private field.
