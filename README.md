@@ -24,7 +24,7 @@ Solution
 2. Add the native DLL to the project as an [embedded resource](https://support.microsoft.com/en-us/kb/319292).
 3. Create an instance of `EmbeddedNativeLibrary`, and call its `GetDelegate` method to obtain a delegate that invokes that native function.
 
-1. and 2. are pretty self-explanatory. 3... not so much. An example should help. This class exposes libsodium's `crypto_secretbox` method (the numbers refer to the descriptions below):
+1 and 2 are pretty self-explanatory. But 3... not so much. An example should help. This class exposes libsodium's `crypto_secretbox` method (the numbers refer to the descriptions below):
 
 ```c#
 public static class Sodium
