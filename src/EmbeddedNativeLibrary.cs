@@ -1,9 +1,12 @@
 ﻿using System;
+using System.ComponentModel;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Remoting.Metadata.W3cXsd2001;
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 
 namespace Rock.Reflection
 {
@@ -20,25 +23,33 @@ namespace Rock.Reflection
         /// Initializes a new instance of the <see cref="EmbeddedNativeLibrary"/> class.
         /// </summary>
         /// <param name="libraryName">The name of the library.</param>
-        /// <param name="nativeDllResourceName">
-        /// The name of the native DLL embedded resource.
+        /// <param name="dllInfos">
+        /// A list of names of the poential native DLL embedded resource.
         /// </param>
-        public EmbeddedNativeLibrary(string libraryName, string nativeDllResourceName)
-            : this(libraryName, () => nativeDllResourceName)
+        public EmbeddedNativeLibrary(string libraryName, params DllInfo[] dllInfos)
         {
-        }
+            if (libraryName == null) throw new ArgumentNullException("libraryName");
+            if (dllInfos == null) throw new ArgumentNullException("dllInfos");
+            if (libraryName == "") throw new ArgumentException("'libraryName' must not be empty.", "libraryName");
+            if (dllInfos.Length == 0) throw new ArgumentException("'dllInfos' must not be empty.", "dllInfos");
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="EmbeddedNativeLibrary"/> class.
-        /// </summary>
-        /// <param name="libraryName">The name of the library.</param>
-        /// <param name="getNativeDllResourceName">
-        /// A function that returns the name of the native DLL embedded resource.
-        /// </param>
-        public EmbeddedNativeLibrary(string libraryName, Func<string> getNativeDllResourceName)
-        {
             _libraryPointer = new Lazy<IntPtr>(() =>
-                LoadLibrary(GetPathToNativeDll(libraryName, getNativeDllResourceName())));
+            {
+                foreach (var dllInfo in dllInfos)
+                {
+                    var libraryPath = GetLibraryPath(libraryName, dllInfo);
+                    var libraryPointer = LoadLibrary(libraryPath);
+
+                    if (libraryPointer != IntPtr.Zero)
+                    {
+                        return libraryPointer;
+                    }
+                }
+
+                throw new InvalidOperationException(
+                    "Unable to load library from resources: " + string.Join(", ", dllInfos.Select(dll => dll.ResourceName)),
+                    new Win32Exception());
+            });
         }
 
         /// <summary>
@@ -82,51 +93,77 @@ namespace Rock.Reflection
 
             if (functionPointer == IntPtr.Zero)
             {
-                throw new InvalidOperationException("Unable to locate function: " + functionName);
+                throw new InvalidOperationException(
+                    "Unable to load function: " + functionName,
+                    new Win32Exception());
             }
 
             return (TDelegate)(object)Marshal.GetDelegateForFunctionPointer(
                 functionPointer, typeof(TDelegate));
         }
 
-        private static string GetPathToNativeDll(string libraryName, string nativeDllResourceName)
+        private static string GetLibraryPath(string libraryName, DllInfo dllInfo)
         {
-            var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(nativeDllResourceName);
+            var dllData = LoadResource(dllInfo.ResourceName);
 
-            if (stream == null)
-            {
-                throw new DllNotFoundException("Unable to locate resource: " + nativeDllResourceName);
-            }
-
-            var buffer = new byte[stream.Length];
-            stream.Read(buffer, 0, buffer.Length);
-
-            var dir =
+            var directory =
                 Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     libraryName,
-                    GetHash(buffer));
+                    GetHash(dllData));
 
-            if (!Directory.Exists(dir))
+            if (!Directory.Exists(directory))
             {
-                Directory.CreateDirectory(dir);
+                Directory.CreateDirectory(directory);
             }
 
-            var path = Path.Combine(dir, libraryName + ".dll");
+            var path = WriteDll(dllData, dllInfo.ResourceName, directory);
 
-            if (!File.Exists(path))
+            var pathVariable = Environment.GetEnvironmentVariable("PATH");
+            pathVariable = pathVariable + ";" + directory;
+            Environment.SetEnvironmentVariable("PATH", pathVariable);
+
+            foreach (var resourceName in dllInfo.AdditionalResourceNames)
             {
-                File.WriteAllBytes(path, buffer);
+                dllData = LoadResource(resourceName);
+                WriteDll(dllData, resourceName, directory);
             }
 
             return path;
         }
 
-        private static string GetHash(byte[] buffer)
+        private static string WriteDll(byte[] dllData, string resourceName, string directory)
+        {
+            var fileName = Regex.Match(resourceName, @"[^.]+\.(?:dll|exe)").Value;
+            var path = Path.Combine(directory, fileName);
+
+            if (!File.Exists(path))
+            {
+                File.WriteAllBytes(path, dllData);
+            }
+
+            return path;
+        }
+
+        private static byte[] LoadResource(string resourceName)
+        {
+            var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName);
+
+            if (stream == null)
+            {
+                throw new DllNotFoundException("Unable to locate resource: " + resourceName);
+            }
+
+            var buffer = new byte[stream.Length];
+            stream.Read(buffer, 0, buffer.Length);
+            return buffer;
+        }
+
+        private static string GetHash(byte[] dllData)
         {
             using (var md5 = MD5.Create())
             {
-                return new SoapHexBinary(md5.ComputeHash(buffer)).ToString();
+                return new SoapHexBinary(md5.ComputeHash(dllData)).ToString();
             }
         }
 
@@ -138,13 +175,55 @@ namespace Rock.Reflection
             }
         }
 
-        [DllImport("kernel32.dll")]
-        private static extern IntPtr LoadLibrary(string dllToLoad);
+        [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Ansi)]
+        private static extern IntPtr LoadLibrary([MarshalAs(UnmanagedType.LPStr)]string lpFileName);
 
-        [DllImport("kernel32.dll")]
-        private static extern IntPtr GetProcAddress(IntPtr hModule, string procedureName);
+        [DllImport("kernel32", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
+        private static extern IntPtr GetProcAddress(IntPtr hModule, string procName);
 
-        [DllImport("kernel32.dll")]
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool FreeLibrary(IntPtr hModule);
+    }
+
+    /// <summary>
+    /// Contains resource names for the DLLs that are embedded in this assembly. The DLLs
+    /// must all be of the same architecture (x86 or x64).
+    /// </summary>
+    internal class DllInfo
+    {
+        private readonly string _resourceName;
+        private readonly string[] _additionalResourceNames;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="DllInfo"/> class.
+        /// </summary>
+        /// <param name="resourceName">The resource name of the main DLL to be loaded.</param>
+        /// <param name="additionalResourceNames">
+        /// The resource names of any additional DLLs that neede to be loaded.
+        /// </param>
+        public DllInfo(string resourceName, params string[] additionalResourceNames)
+        {
+            if (resourceName == null) throw new ArgumentNullException("resourceName");
+
+            _resourceName = resourceName;
+            _additionalResourceNames = additionalResourceNames ?? new string[0];
+        }
+
+        /// <summary>
+        /// Gets the resource name of the main DLL to be loaded.
+        /// </summary>
+        public string ResourceName
+        {
+            get { return _resourceName; }
+        }
+
+        /// <summary>
+        /// Gets the resource names of any additional DLLs that need to be loaded.
+        /// </summary>
+        public string[] AdditionalResourceNames
+        {
+            get { return _additionalResourceNames; }
+        }
     }
 }
