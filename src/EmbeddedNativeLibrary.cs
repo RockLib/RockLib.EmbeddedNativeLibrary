@@ -24,7 +24,7 @@ namespace Rock.Reflection
         /// </summary>
         /// <param name="libraryName">The name of the library.</param>
         /// <param name="dllInfos">
-        /// A list of names of the poential native DLL embedded resource.
+        /// A collection of <see cref="DllInfo"/> objects that describe the native library.
         /// </param>
         public EmbeddedNativeLibrary(string libraryName, params DllInfo[] dllInfos)
         {
