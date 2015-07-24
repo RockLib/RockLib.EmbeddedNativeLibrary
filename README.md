@@ -37,7 +37,10 @@ public static class Sodium
 
     static Sodium()
     {
-        var sodiumLibrary = new EmbeddedNativeLibrary("sodium", "MyLibrary.libsodium.dll"); // 3
+        var sodiumLibrary = new EmbeddedNativeLibrary(
+            "sodium",
+            new DllInfo("MyLibrary.Native64.libsodium.dll", "MyLibrary.Native64.msvcr120.dll"),
+            new DllInfo("MyLibrary.Native32.libsodium.dll", "MyLibrary.Native32.msvcr120.dll")); // 3
         _cryptoSecretbox = sodiumLibrary.GetDelegate<SecretBoxDelegate>("crypto_secretbox"); // 4
     }
 
@@ -55,8 +58,15 @@ There are several things going on here.
 2. Decorate that delegate with an `[UnmanagedFunctionPointer]` attribute.
   - You may get a run-time error if you don't decorate the delegate with this attribute.
   - You'll need to know the calling convention of the native function (libsodium in the example uses the CDECL calling convention).
-3. Create an instance of `EmbeddedNativeLibrary`, passing it the name of the library, and the name of the resource.
-  - There is another constructor that allows you to choose the "correct" resource. This is useful for differentiating between 32-bit and 64-bit native DLLs.
+3. Create an instance of `EmbeddedNativeLibrary`, passing it the name of the library, and one or more `DllInfo` objects.
+  - A `DllInfo` object allows you to specify resource name of the DLL
+    - Additional DLLs may also be specified when the primary DLL has dependencies on another DLLs.
+    - All DLLs should all target the same architecture (x86 or x64).
+  - `EmbeddedNativeLibrary` is able to handle multiple architectures by passing multiple `DllInfo` objects into its constructor. However, it doesn't actually track or check the architecture of the embedded DLLs. During loading, this is what `EmbeddedNativeLibrary` does:
+    - Attempt to load the DLL specified by the first `DllInfo`.
+    - If that DLL cannot be loaded, try the DLL specified by the second `DllInfo`.
+    - Keep going until a DLL is successfully loaded.
+    - If no DLL is successfully loaded, throw an exception.
 4. Call the `GetDelegate` method, caching the resulting delegate in a private field.
 5. Invoke the cached delegate.
   - _This_ is what you've wanted all along - a delegate that, when invoked, calls the native function.
