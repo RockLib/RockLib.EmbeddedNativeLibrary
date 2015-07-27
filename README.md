@@ -1,7 +1,11 @@
 Rock.EmbeddedNativeLibrary
 ==========================
 
-Consuming native DLLs (usually C libraries) can be tricky in .NET - especially when you're dealing with a NuGet package. This package is a solution to the problem.
+Consuming third-party native DLLs (usually C libraries) can be tricky in .NET - especially when your project is deployed as a NuGet package. The Rock.EmbeddedNativeLibrary NuGet package makes this sort of native interop easy.
+
+```
+PM> Install-Package Rock.EmbeddedNativeLibrary
+```
 
 Problem
 --------
