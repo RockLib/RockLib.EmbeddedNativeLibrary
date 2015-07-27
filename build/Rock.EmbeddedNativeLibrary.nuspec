@@ -1,19 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
 <package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
-  <metadata>
-    <id>Rock.EmbeddedNativeLibrary</id>
-    <version>1.0.0</version>
-    <title>Rock.EmbeddedNativeLibrary</title>
-    <authors>Brian Friesen</authors>
-    <owners>Brian Friesen</owners>
-    <licenseUrl>https://github.com/RockFramework/Rock.EmbeddedNativeLibrary/blob/master/LICENSE.md</licenseUrl>
-    <projectUrl>https://github.com/RockFramework/Rock.EmbeddedNativeLibrary</projectUrl>
-    <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <developmentDependency>true</developmentDependency>
-    <description>Use native DLLs when they're added to a project as an embedded resource.</description>
-    <summary>Use native DLLs when they're added to a project as an embedded resource.</summary>
-    <tags>native library embedded resource</tags>
-  </metadata>
-  <files>
-    <file src="content\Rock.EmbeddedNativeLibrary\EmbeddedNativeLibrary.cs.pp" target="content\Rock.EmbeddedNativeLibrary\EmbeddedNativeLibrary.cs.pp" />
-  </files>
+    <metadata>
+        <id>Rock.EmbeddedNativeLibrary</id>
+        <version>0.0.0</version>
+        <title>Rock.EmbeddedNativeLibrary</title>
+        <authors>Quicken Loans</authors>
+        <owners>Quicken Loans</owners>
+        <licenseUrl>https://github.com/RockFramework/Rock.EmbeddedNativeLibrary/blob/master/LICENSE.md</licenseUrl>
+        <projectUrl>https://github.com/RockFramework/Rock.EmbeddedNativeLibrary</projectUrl>
+        <requireLicenseAcceptance>false</requireLicenseAcceptance>
+        <developmentDependency>true</developmentDependency>
+        <description>Consume native libraries from .NET by adding as embedded resources.</description>
+        <summary>Consume native libraries from .NET by adding as embedded resources.</summary>
+        <tags>native library embedded resource</tags>
+    </metadata>
+    <files>
+        <file src="content\Rock.EmbeddedNativeLibrary\EmbeddedNativeLibrary.cs.pp" target="content\Rock.EmbeddedNativeLibrary\EmbeddedNativeLibrary.cs.pp" />
+    </files>
 </package>
