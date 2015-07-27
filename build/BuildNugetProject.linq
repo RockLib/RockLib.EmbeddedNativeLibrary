@@ -72,8 +72,10 @@ private static void WriteContentFiles(string contentDir, FileTemplate embeddedNa
     var embeddedNativeLibrary = Path.Combine(contentDir, "Rock.EmbeddedNativeLibrary");
     
     Directory.CreateDirectory(embeddedNativeLibrary);
+    
+    var contents = embeddedNativeLibraryFileTemplate.Contents.Replace("namespace Rock.Reflection", "namespace $rootnamespace$");
 
-    File.WriteAllText(Path.Combine(embeddedNativeLibrary, embeddedNativeLibraryFileTemplate.Name), embeddedNativeLibraryFileTemplate.Contents);
+    File.WriteAllText(Path.Combine(embeddedNativeLibrary, embeddedNativeLibraryFileTemplate.Name), contents);
 }
 
 private static void WriteNuspecFile(string buildDir, string artifactsDir, FileTemplate embeddedNativeLibraryFileTemplate, string version)
