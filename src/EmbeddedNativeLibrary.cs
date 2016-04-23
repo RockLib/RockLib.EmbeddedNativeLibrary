@@ -52,7 +52,7 @@ namespace Rock.Reflection
                 foreach (var dllInfo in dllInfos)
                 {
                     var libraryPath = GetLibraryPath(libraryName, dllInfo);
-                    var libraryPointer = LoadLibrary(libraryPath);
+                    var libraryPointer = NativeMethods.LoadLibrary(libraryPath);
 
                     if (libraryPointer != IntPtr.Zero)
                     {
@@ -117,7 +117,7 @@ namespace Rock.Reflection
                 throw new InvalidOperationException("TDelegate must be a delegate.");
             }
 
-            var functionPointer = GetProcAddress(_libraryPointer.Value, functionName);
+            var functionPointer = NativeMethods.GetProcAddress(_libraryPointer.Value, functionName);
 
             if (functionPointer == IntPtr.Zero)
             {
@@ -199,19 +199,21 @@ namespace Rock.Reflection
         {
             if (_libraryPointer.IsValueCreated)
             {
-                FreeLibrary(_libraryPointer.Value);
+                NativeMethods.FreeLibrary(_libraryPointer.Value);
             }
         }
 
-        [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Ansi)]
-        private static extern IntPtr LoadLibrary([MarshalAs(UnmanagedType.LPStr)]string lpFileName);
+        private static class NativeMethods
+        {
+            [DllImport("kernel32.dll", EntryPoint = "LoadLibrary", BestFitMapping = false, ThrowOnUnmappableChar = true, SetLastError = true)]
+            public static extern IntPtr LoadLibrary([MarshalAs(UnmanagedType.LPStr)] string lpLibFileName);
 
-        [DllImport("kernel32", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
-        private static extern IntPtr GetProcAddress(IntPtr hModule, string procName);
+            [DllImport("kernel32.dll", EntryPoint = "GetProcAddress", BestFitMapping = false, ThrowOnUnmappableChar = true, SetLastError = true)]
+            public static extern IntPtr GetProcAddress(IntPtr hModule, [MarshalAs(UnmanagedType.LPStr)] string lpProcName);
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool FreeLibrary(IntPtr hModule);
+            [DllImport("kernel32.dll", EntryPoint = "FreeLibrary", SetLastError = true)]
+            public static extern bool FreeLibrary(IntPtr hModule);
+        }
     }
 
     /// <summary>
@@ -279,6 +281,7 @@ namespace Rock.Reflection
     /// An exception thrown when a problem is encountered when loading a native library or
     /// a native library's function.
     /// </summary>
+    [Serializable]
     public sealed class EmbeddedNativeLibraryException : AggregateException
     {
         /// <summary>
