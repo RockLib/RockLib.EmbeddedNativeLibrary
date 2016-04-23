@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
@@ -36,6 +37,8 @@ namespace Rock.Reflection
 
             _libraryPointer = new Lazy<IntPtr>(() =>
             {
+                var win32Exceptions = new List<Exception>();
+
                 foreach (var dllInfo in dllInfos)
                 {
                     var libraryPath = GetLibraryPath(libraryName, dllInfo);
@@ -45,11 +48,13 @@ namespace Rock.Reflection
                     {
                         return libraryPointer;
                     }
+
+                    win32Exceptions.Add(new Win32Exception());
                 }
 
-                throw new InvalidOperationException(
+                throw new EmbeddedNativeLibraryException(
                     "Unable to load library from resources: " + string.Join(", ", dllInfos.Select(dll => dll.ResourceName)),
-                    new Win32Exception());
+                    win32Exceptions.ToArray());
             });
         }
 
@@ -94,7 +99,7 @@ namespace Rock.Reflection
 
             if (functionPointer == IntPtr.Zero)
             {
-                throw new InvalidOperationException(
+                throw new EmbeddedNativeLibraryException(
                     "Unable to load function: " + functionName,
                     new Win32Exception());
             }
@@ -191,7 +196,7 @@ namespace Rock.Reflection
     /// Contains resource names for the DLLs that are embedded in this assembly. The DLLs
     /// must all be of the same architecture (x86 or x64).
     /// </summary>
-    internal class DllInfo
+    internal sealed class DllInfo
     {
         private readonly string _resourceName;
         private readonly string[] _additionalResourceNames;
@@ -225,6 +230,18 @@ namespace Rock.Reflection
         public string[] AdditionalResourceNames
         {
             get { return _additionalResourceNames; }
+        }
+    }
+
+    /// <summary>
+    /// An exception thrown when a problem is encountered when loading a native library or
+    /// a native library's function.
+    /// </summary>
+    public sealed class EmbeddedNativeLibraryException : AggregateException
+    {
+        internal EmbeddedNativeLibraryException(string message, params Exception[] win32Exceptions)
+            : base(message, win32Exceptions)
+        {
         }
     }
 }
