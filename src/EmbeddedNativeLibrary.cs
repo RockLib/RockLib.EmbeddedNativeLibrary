@@ -28,6 +28,16 @@ namespace Rock.Reflection
         /// <param name="dllInfos">
         /// A collection of <see cref="DllInfo"/> objects that describe the native library.
         /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// <paramref name="libraryName"/> is null.
+        /// or
+        /// <paramref name="dllInfos"/> is null.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// <paramref name="libraryName"/> is empty.
+        /// or
+        /// <paramref name="dllInfos"/> is empty.
+        /// </exception>
         public EmbeddedNativeLibrary(string libraryName, params DllInfo[] dllInfos)
         {
             if (libraryName == null) throw new ArgumentNullException("libraryName");
@@ -83,13 +93,25 @@ namespace Rock.Reflection
         /// <typeparam name="TDelegate">The type of the delegate.</typeparam>
         /// <param name="functionName">The name of the native function.</param>
         /// <returns>A delegate that executes the native function.</returns>
+        /// <exception cref="ArgumentNullException">
+        /// <paramref name="functionName"/> is null.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// <paramref name="functionName"/> is empty.
+        /// </exception>
         /// <exception cref="System.InvalidOperationException">
         /// TDelegate is not delegate.
+        /// </exception>
+        /// <exception cref="EmbeddedNativeLibraryException">
+        /// Unable to load the native library.
         /// or
-        /// Unable to locate functionName.
+        /// Unable to get a pointer to the function.
         /// </exception>
         public TDelegate GetDelegate<TDelegate>(string functionName)
         {
+            if (functionName == null) throw new ArgumentNullException("functionName");
+            if (functionName == "") throw new ArgumentException("'functionName' must not be empty.", "functionName");
+
             if (!typeof(Delegate).IsAssignableFrom(typeof(TDelegate)))
             {
                 throw new InvalidOperationException("TDelegate must be a delegate.");
@@ -208,9 +230,29 @@ namespace Rock.Reflection
         /// <param name="additionalResourceNames">
         /// The resource names of any additional DLLs that neede to be loaded.
         /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// <paramref name="resourceName"/> is null.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// <paramref name="resourceName"/> is empty.
+        /// or
+        /// <paramref name="additionalResourceNames"/> has any null elements.
+        /// or
+        /// <paramref name="additionalResourceNames"/> has any empty elements.
+        /// </exception>
         public DllInfo(string resourceName, params string[] additionalResourceNames)
         {
             if (resourceName == null) throw new ArgumentNullException("resourceName");
+            if (resourceName == "") throw new ArgumentException("'resourceName' must not be empty.", "resourceName");
+
+            if (additionalResourceNames != null)
+            {
+                foreach (var additionalResourceName in additionalResourceNames)
+                {
+                    if (additionalResourceName == null) throw new ArgumentException("Elements of 'additionalResourceNames' must not be null.", "additionalResourceNames");
+                    if (additionalResourceName == "") throw new ArgumentException("Elements of 'additionalResourceNames' must not be empty.", "additionalResourceNames");
+                }
+            }
 
             _resourceName = resourceName;
             _additionalResourceNames = additionalResourceNames ?? new string[0];
@@ -239,6 +281,19 @@ namespace Rock.Reflection
     /// </summary>
     public sealed class EmbeddedNativeLibraryException : AggregateException
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="EmbeddedNativeLibraryException"/> class
+        /// with a specified error message and references to the inner exceptions that are the
+        /// cause of this exception. 
+        /// </summary>
+        /// <param name="message">The error message that explains the reason for the exception.</param>
+        /// <param name="win32Exceptions">The exceptions that are the cause of the current exception.</param>
+        /// <exception cref="ArgumentNullException">
+        /// <paramref name="win32Exceptions"/> argument is null.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// <paramref name="win32Exceptions"/> has any null elements.
+        /// </exception>
         internal EmbeddedNativeLibraryException(string message, params Exception[] win32Exceptions)
             : base(message, win32Exceptions)
         {
