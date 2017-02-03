@@ -133,16 +133,34 @@ namespace Rock.Reflection
         private static string GetLibraryPath(string libraryName, DllInfo dllInfo)
         {
             var dllData = LoadResource(dllInfo.ResourceName);
+            var hash = GetHash(dllData);
 
-            var directory =
-                Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    libraryName,
-                    GetHash(dllData));
-
-            if (!Directory.Exists(directory))
+            string directory;
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            Exception localApplicationDataException = null;
+            if (!TryGetWritableDirectory(
+                    localAppData, libraryName, hash, out directory, ref localApplicationDataException))
             {
-                Directory.CreateDirectory(directory);
+                var tempDirectory = Environment.GetEnvironmentVariable("TMP");
+                if (tempDirectory == null)
+                {
+                    tempDirectory = Environment.GetEnvironmentVariable("TEMP");
+                    if (tempDirectory == null)
+                    {
+                        throw new EmbeddedNativeLibraryException(
+                            string.Format("Unable to write to %LOCALAPPDATA% ({0}) and no TEMP directory exists.", localAppData),
+                            localApplicationDataException);
+                    }
+                }
+
+                Exception tempException = null;
+                if (!TryGetWritableDirectory(
+                        tempDirectory, libraryName, hash, out directory, ref tempException))
+                {
+                    throw new EmbeddedNativeLibraryException(
+                        string.Format("Unable to write to %LOCALAPPDATA% ({0}) or the TEMP directory ({1}).", localAppData, tempDirectory),
+                        localApplicationDataException, tempException);
+                }
             }
 
             var path = WriteDll(dllData, dllInfo.ResourceName, directory);
@@ -158,6 +176,41 @@ namespace Rock.Reflection
             }
 
             return path;
+        }
+
+        private static bool TryGetWritableDirectory(
+            string root, string libraryName, string hash, out string directory, ref Exception exception)
+        {
+            var dir = Path.Combine(root, libraryName, hash);
+            if (!Directory.Exists(dir))
+            {
+                try
+                {
+                    Directory.CreateDirectory(dir);
+                }
+                catch (UnauthorizedAccessException ex)
+                {
+                    exception = ex;
+                    directory = null;
+                    return false;
+                }
+            }
+
+            try
+            {
+                var filePath = Path.Combine(dir, Path.GetRandomFileName());
+                using (var stream = File.Create(filePath)) stream.WriteByte(1);
+                File.Delete(filePath);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                exception = ex;
+                directory = null;
+                return false;
+            }
+
+            directory = dir;
+            return true;
         }
 
         private static string WriteDll(byte[] dllData, string resourceName, string directory)
