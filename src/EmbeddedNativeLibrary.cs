@@ -52,7 +52,7 @@ namespace Rock.Reflection
                 foreach (var dllInfo in dllInfos)
                 {
                     var libraryPath = GetLibraryPath(libraryName, dllInfo);
-                    var libraryPointer = NativeMethods.LoadLibrary(libraryPath);
+                    var libraryPointer = NativeMethods.LoadLibraryEx(libraryPath, IntPtr.Zero, LoadLibraryFlags.LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR);
 
                     if (libraryPointer != IntPtr.Zero)
                     {
@@ -165,10 +165,6 @@ namespace Rock.Reflection
 
             var path = WriteDll(dllData, dllInfo.ResourceName, directory);
 
-            var pathVariable = Environment.GetEnvironmentVariable("PATH");
-            pathVariable = pathVariable + ";" + directory;
-            Environment.SetEnvironmentVariable("PATH", pathVariable);
-
             foreach (var resourceName in dllInfo.AdditionalResourceNames)
             {
                 dllData = LoadResource(resourceName);
@@ -258,14 +254,30 @@ namespace Rock.Reflection
 
         private static class NativeMethods
         {
-            [DllImport("kernel32.dll", EntryPoint = "LoadLibrary", BestFitMapping = false, ThrowOnUnmappableChar = true, SetLastError = true)]
-            public static extern IntPtr LoadLibrary([MarshalAs(UnmanagedType.LPStr)] string lpLibFileName);
+            [DllImport("kernel32.dll", EntryPoint = "LoadLibraryEx", BestFitMapping = false, ThrowOnUnmappableChar = true, SetLastError = true)]
+            public static extern IntPtr LoadLibraryEx([MarshalAs(UnmanagedType.LPStr)] string lpFileName, IntPtr hReservedNull, LoadLibraryFlags dwFlags);
 
             [DllImport("kernel32.dll", EntryPoint = "GetProcAddress", BestFitMapping = false, ThrowOnUnmappableChar = true, SetLastError = true)]
             public static extern IntPtr GetProcAddress(IntPtr hModule, [MarshalAs(UnmanagedType.LPStr)] string lpProcName);
 
             [DllImport("kernel32.dll", EntryPoint = "FreeLibrary", SetLastError = true)]
             public static extern bool FreeLibrary(IntPtr hModule);
+        }
+
+        [Flags]
+        private enum LoadLibraryFlags : uint
+        {
+            DONT_RESOLVE_DLL_REFERENCES =           0x00000001,
+            LOAD_LIBRARY_AS_DATAFILE =              0x00000002,
+            LOAD_WITH_ALTERED_SEARCH_PATH =         0x00000008,
+            LOAD_IGNORE_CODE_AUTHZ_LEVEL =          0x00000010,
+            LOAD_LIBRARY_AS_IMAGE_RESOURCE =        0x00000020,
+            LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE =    0x00000040,
+            LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR =      0x00000100,
+            LOAD_LIBRARY_SEARCH_APPLICATION_DIR =   0x00000200,
+            LOAD_LIBRARY_SEARCH_USER_DIRS =         0x00000400,
+            LOAD_LIBRARY_SEARCH_SYSTEM32 =          0x00000800,
+            LOAD_LIBRARY_SEARCH_DEFAULT_DIRS =      0x00001000,
         }
     }
 
