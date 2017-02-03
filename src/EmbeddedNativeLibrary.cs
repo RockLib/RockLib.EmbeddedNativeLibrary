@@ -218,6 +218,16 @@ namespace Rock.Reflection
             {
                 File.WriteAllBytes(path, dllData);
             }
+            else
+            {
+                var fileDllData = File.ReadAllBytes(path);
+                if (dllData.Length != fileDllData.Length
+                    || GetHash(dllData) != GetHash(fileDllData))
+                {
+                    File.Delete(path);
+                    File.WriteAllBytes(path, dllData);
+                }
+            }
 
             return path;
         }
