@@ -14,7 +14,5 @@
         <summary>Consume native libraries from .NET by adding as embedded resources.</summary>
         <tags>native library embedded resource</tags>
     </metadata>
-    <files>
-        <file src="content\Rock.EmbeddedNativeLibrary\EmbeddedNativeLibrary.cs.pp" target="content\Rock.EmbeddedNativeLibrary\EmbeddedNativeLibrary.cs.pp" />
-    </files>
+    <files />
 </package>
