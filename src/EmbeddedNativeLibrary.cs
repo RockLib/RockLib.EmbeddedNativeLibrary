@@ -47,7 +47,7 @@ namespace Rock.Reflection
 
             _libraryPointer = new Lazy<IntPtr>(() =>
             {
-                var win32Exceptions = new List<Exception>();
+                var exceptions = new List<Exception>();
 
                 foreach (var dllInfo in dllInfos)
                 {
@@ -59,12 +59,12 @@ namespace Rock.Reflection
                         return libraryPointer;
                     }
 
-                    win32Exceptions.Add(new Win32Exception());
+                    exceptions.Add(new Win32Exception());
                 }
 
                 throw new EmbeddedNativeLibraryException(
                     "Unable to load library from resources: " + string.Join(", ", dllInfos.Select(dll => dll.ResourceName)),
-                    win32Exceptions.ToArray());
+                    exceptions.ToArray());
             });
         }
 
@@ -290,15 +290,15 @@ namespace Rock.Reflection
         /// cause of this exception. 
         /// </summary>
         /// <param name="message">The error message that explains the reason for the exception.</param>
-        /// <param name="win32Exceptions">The exceptions that are the cause of the current exception.</param>
+        /// <param name="exceptions">The exceptions that are the cause of the current exception.</param>
         /// <exception cref="ArgumentNullException">
-        /// <paramref name="win32Exceptions"/> argument is null.
+        /// <paramref name="exceptions"/> argument is null.
         /// </exception>
         /// <exception cref="ArgumentException">
-        /// <paramref name="win32Exceptions"/> has any null elements.
+        /// <paramref name="exceptions"/> has any null elements.
         /// </exception>
-        internal EmbeddedNativeLibraryException(string message, params Exception[] win32Exceptions)
-            : base(message, win32Exceptions)
+        internal EmbeddedNativeLibraryException(string message, params Exception[] exceptions)
+            : base(message, exceptions)
         {
         }
     }
