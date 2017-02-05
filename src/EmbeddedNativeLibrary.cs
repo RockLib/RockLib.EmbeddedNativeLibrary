@@ -52,7 +52,22 @@ namespace Rock.Reflection
                 foreach (var dllInfo in dllInfos)
                 {
                     var libraryPath = GetLibraryPath(libraryName, dllInfo);
-                    var libraryPointer = NativeMethods.LoadLibraryEx(libraryPath, IntPtr.Zero, LoadLibraryFlags.LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR);
+                    var libraryPointer = NativeMethods.LoadLibraryEx(libraryPath, IntPtr.Zero, LoadLibraryFlags.LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LoadLibraryFlags.LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+
+                    if (libraryPointer != IntPtr.Zero)
+                    {
+                        return libraryPointer;
+                    }
+
+                    exceptions.Add(new Win32Exception());
+
+                    var originalPathVariable = Environment.GetEnvironmentVariable("PATH");
+                    var pathVariable = originalPathVariable + ";" + Path.GetDirectoryName(libraryPath);
+                    Environment.SetEnvironmentVariable("PATH", pathVariable);
+
+                    libraryPointer = NativeMethods.LoadLibrary(libraryPath);
+
+                    Environment.SetEnvironmentVariable("PATH", originalPathVariable);
 
                     if (libraryPointer != IntPtr.Zero)
                     {
@@ -266,6 +281,9 @@ namespace Rock.Reflection
         {
             [DllImport("kernel32.dll", EntryPoint = "LoadLibraryEx", BestFitMapping = false, ThrowOnUnmappableChar = true, SetLastError = true)]
             public static extern IntPtr LoadLibraryEx([MarshalAs(UnmanagedType.LPStr)] string lpFileName, IntPtr hReservedNull, LoadLibraryFlags dwFlags);
+
+            [DllImport("kernel32.dll", EntryPoint = "LoadLibrary", BestFitMapping = false, ThrowOnUnmappableChar = true, SetLastError = true)]
+            public static extern IntPtr LoadLibrary([MarshalAs(UnmanagedType.LPStr)] string lpLibFileName);
 
             [DllImport("kernel32.dll", EntryPoint = "GetProcAddress", BestFitMapping = false, ThrowOnUnmappableChar = true, SetLastError = true)]
             public static extern IntPtr GetProcAddress(IntPtr hModule, [MarshalAs(UnmanagedType.LPStr)] string lpProcName);
