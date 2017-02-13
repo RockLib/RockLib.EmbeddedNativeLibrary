@@ -5,8 +5,8 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Runtime.Remoting.Metadata.W3cXsd2001;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 
 // ReSharper disable once CheckNamespace
@@ -265,7 +265,13 @@ namespace Rock.Reflection
         {
             using (var md5 = MD5.Create())
             {
-                return new SoapHexBinary(md5.ComputeHash(dllData)).ToString();
+                var hash = md5.ComputeHash(dllData);
+                var sb = new StringBuilder(hash.Length * 2);
+                foreach (var b in hash)
+                {
+                    sb.Append(b.ToString("x2"));
+                }
+                return sb.ToString();
             }
         }
 
