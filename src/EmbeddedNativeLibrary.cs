@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -19,6 +19,8 @@ namespace Rock.Reflection
     /// </summary>
     internal sealed class EmbeddedNativeLibrary : IDisposable
     {
+        private static readonly ILibraryLoader _libraryLoader = GetLibraryLoader();
+
         private readonly Lazy<IntPtr> _libraryPointer;
 
         /// <summary>
@@ -52,29 +54,20 @@ namespace Rock.Reflection
                 foreach (var dllInfo in dllInfos)
                 {
                     var libraryPath = GetLibraryPath(libraryName, dllInfo);
-                    var libraryPointer = NativeMethods.LoadLibraryEx(libraryPath, IntPtr.Zero, LoadLibraryFlags.LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LoadLibraryFlags.LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+                    var maybePointer = _libraryLoader.LoadLibrary(libraryPath);
 
-                    if (libraryPointer != IntPtr.Zero)
+                    if (maybePointer.HasValue)
                     {
-                        return libraryPointer;
+                        return maybePointer.Value;
                     }
-
-                    exceptions.Add(new Win32Exception());
-
-                    var originalPathVariable = Environment.GetEnvironmentVariable("PATH");
-                    var pathVariable = originalPathVariable + ";" + Path.GetDirectoryName(libraryPath);
-                    Environment.SetEnvironmentVariable("PATH", pathVariable);
-
-                    libraryPointer = NativeMethods.LoadLibrary(libraryPath);
-
-                    Environment.SetEnvironmentVariable("PATH", originalPathVariable);
-
-                    if (libraryPointer != IntPtr.Zero)
-                    {
-                        return libraryPointer;
-                    }
-
-                    exceptions.Add(new Win32Exception());
+                    
+                    exceptions.Add(new AggregateException(
+                        string.Format(
+                            "The load library operation for '{0}' failed and reported {1} exception{2}.",
+                            dllInfo.ResourceName,
+                            maybePointer.Exceptions.Length,
+                            maybePointer.Exceptions.Length > 1 ? "s" : ""),
+                        maybePointer.Exceptions));
                 }
 
                 throw new EmbeddedNativeLibraryException(
@@ -132,50 +125,51 @@ namespace Rock.Reflection
                 throw new InvalidOperationException("TDelegate must be a delegate.");
             }
 
-            var functionPointer = NativeMethods.GetProcAddress(_libraryPointer.Value, functionName);
+            var maybePointer = _libraryLoader.GetFunctionPointer(_libraryPointer.Value, functionName);
 
-            if (functionPointer == IntPtr.Zero)
+            if (!maybePointer.HasValue)
             {
                 throw new EmbeddedNativeLibraryException(
                     "Unable to load function: " + functionName,
-                    new Win32Exception());
+                    maybePointer.Exceptions);
             }
 
             return (TDelegate)(object)Marshal.GetDelegateForFunctionPointer(
-                functionPointer, typeof(TDelegate));
+                maybePointer.Value, typeof(TDelegate));
+        }
+
+        private static ILibraryLoader GetLibraryLoader()
+        {
+            return new WindowsLibraryLoader();
         }
 
         private static string GetLibraryPath(string libraryName, DllInfo dllInfo)
         {
-            var dllData = LoadResource(dllInfo.ResourceName);
-            var hash = GetHash(dllData);
+            byte[] dllData = LoadResource(dllInfo.ResourceName);
+            string hash = GetHash(dllData);
 
-            string directory;
-            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            Exception localApplicationDataException = null;
-            if (!TryGetWritableDirectory(
-                    localAppData, libraryName, hash, out directory, ref localApplicationDataException))
+            string directory = null;
+
+            var exceptions = new List<Exception>();
+            foreach (var candidateLocation in _libraryLoader.CandidateLocations)
             {
-                var tempDirectory = Environment.GetEnvironmentVariable("TMP");
-                if (tempDirectory == null)
+                Exception exception = null;
+                if (TryGetWritableDirectory(
+                    candidateLocation, libraryName, hash, out directory, ref exception))
                 {
-                    tempDirectory = Environment.GetEnvironmentVariable("TEMP");
-                    if (tempDirectory == null)
-                    {
-                        throw new EmbeddedNativeLibraryException(
-                            string.Format("Unable to write to %LOCALAPPDATA% ({0}) and no TEMP directory exists.", localAppData),
-                            localApplicationDataException);
-                    }
+                    Debug.Assert(directory != null, "'diretory' must not be null if TryGetWritableDirectory returns true.");
+                    break;
                 }
+                exceptions.Add(exception);
+            }
 
-                Exception tempException = null;
-                if (!TryGetWritableDirectory(
-                        tempDirectory, libraryName, hash, out directory, ref tempException))
-                {
-                    throw new EmbeddedNativeLibraryException(
-                        string.Format("Unable to write to %LOCALAPPDATA% ({0}) or the TEMP directory ({1}).", localAppData, tempDirectory),
-                        localApplicationDataException, tempException);
-                }
+            if (directory == null)
+            {
+                throw new EmbeddedNativeLibraryException(
+                    string.Format(
+                        "Unable to obtain writable file path in candidate locations: {0}.",
+                        string.Join(", ", _libraryLoader.CandidateLocations.Select(x => "'" + x + "'"))),
+                    exceptions.ToArray());
             }
 
             var path = WriteDll(dllData, dllInfo.ResourceName, directory);
@@ -249,7 +243,7 @@ namespace Rock.Reflection
 
         private static byte[] LoadResource(string resourceName)
         {
-            var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName);
+            var stream = typeof(EmbeddedNativeLibrary).Assembly.GetManifestResourceStream(resourceName);
 
             if (stream == null)
             {
@@ -279,39 +273,146 @@ namespace Rock.Reflection
         {
             if (_libraryPointer.IsValueCreated)
             {
-                NativeMethods.FreeLibrary(_libraryPointer.Value);
+                _libraryLoader.FreeLibrary(_libraryPointer.Value);
             }
         }
 
-        private static class NativeMethods
+        private interface ILibraryLoader
         {
-            [DllImport("kernel32.dll", EntryPoint = "LoadLibraryEx", BestFitMapping = false, ThrowOnUnmappableChar = true, SetLastError = true)]
-            public static extern IntPtr LoadLibraryEx([MarshalAs(UnmanagedType.LPStr)] string lpFileName, IntPtr hReservedNull, LoadLibraryFlags dwFlags);
-
-            [DllImport("kernel32.dll", EntryPoint = "LoadLibrary", BestFitMapping = false, ThrowOnUnmappableChar = true, SetLastError = true)]
-            public static extern IntPtr LoadLibrary([MarshalAs(UnmanagedType.LPStr)] string lpLibFileName);
-
-            [DllImport("kernel32.dll", EntryPoint = "GetProcAddress", BestFitMapping = false, ThrowOnUnmappableChar = true, SetLastError = true)]
-            public static extern IntPtr GetProcAddress(IntPtr hModule, [MarshalAs(UnmanagedType.LPStr)] string lpProcName);
-
-            [DllImport("kernel32.dll", EntryPoint = "FreeLibrary", SetLastError = true)]
-            public static extern bool FreeLibrary(IntPtr hModule);
+            string[] CandidateLocations { get; }
+            MaybeIntPtr LoadLibrary(string libraryPath);
+            void FreeLibrary(IntPtr libraryPointer);
+            MaybeIntPtr GetFunctionPointer(IntPtr libraryPointer, string functionName);
         }
 
-        [Flags]
-        private enum LoadLibraryFlags : uint
+        private class MaybeIntPtr
         {
-            DONT_RESOLVE_DLL_REFERENCES =           0x00000001,
-            LOAD_LIBRARY_AS_DATAFILE =              0x00000002,
-            LOAD_WITH_ALTERED_SEARCH_PATH =         0x00000008,
-            LOAD_IGNORE_CODE_AUTHZ_LEVEL =          0x00000010,
-            LOAD_LIBRARY_AS_IMAGE_RESOURCE =        0x00000020,
-            LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE =    0x00000040,
-            LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR =      0x00000100,
-            LOAD_LIBRARY_SEARCH_APPLICATION_DIR =   0x00000200,
-            LOAD_LIBRARY_SEARCH_USER_DIRS =         0x00000400,
-            LOAD_LIBRARY_SEARCH_SYSTEM32 =          0x00000800,
-            LOAD_LIBRARY_SEARCH_DEFAULT_DIRS =      0x00001000,
+            public MaybeIntPtr(IntPtr value)
+            {
+                Debug.Assert(value != IntPtr.Zero, "MaybeIntPtr.ctor(IntPtr value): value must be non-zero.");
+                Value = value;
+            }
+
+            public MaybeIntPtr(Exception[] exceptions)
+            {
+                Debug.Assert(exceptions != null, "MaybeIntPtr.ctor(Exception[] exceptions): exceptions parameter must not be null.");
+                Debug.Assert(exceptions.Length >= 1, "MaybeIntPtr.ctor(Exception[] exceptions): exceptions must contain at least one element.");
+                Exceptions = exceptions;
+            }
+
+            public IntPtr Value { get; private set; }
+            public Exception[] Exceptions { get; private set; }
+            public bool HasValue { get { return Value != IntPtr.Zero; } }
+        }
+
+        private class WindowsLibraryLoader : ILibraryLoader
+        {
+            private static readonly string[] _candidateLocations;
+
+            static WindowsLibraryLoader()
+            {
+                var candidateLocations = new List<string>();
+                var localAppData = Environment.GetEnvironmentVariable("LocalAppData");
+                if (!string.IsNullOrEmpty(localAppData))
+                {
+                    candidateLocations.Add(localAppData);
+                }
+
+                var tmpDirectory = Environment.GetEnvironmentVariable("TMP");
+                if (!string.IsNullOrEmpty(tmpDirectory))
+                {
+                    candidateLocations.Add(tmpDirectory);
+                }
+
+                var tempDirectory = Environment.GetEnvironmentVariable("TEMP");
+                if (!string.IsNullOrEmpty(tempDirectory))
+                {
+                    candidateLocations.Add(tempDirectory);
+                }
+
+                _candidateLocations = candidateLocations.ToArray();
+            }
+
+            public string[] CandidateLocations { get { return _candidateLocations; } }
+
+            public MaybeIntPtr LoadLibrary(string libraryPath)
+            {
+                var exceptions = new List<Exception>();
+
+                var libraryPointer = NativeMethods.LoadLibraryEx(libraryPath, IntPtr.Zero, LoadLibraryFlags.LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LoadLibraryFlags.LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+
+                if (libraryPointer != IntPtr.Zero)
+                {
+                    return new MaybeIntPtr(libraryPointer);
+                }
+
+                exceptions.Add(new Win32Exception());
+
+                var originalPathVariable = Environment.GetEnvironmentVariable("PATH");
+                var pathVariable = originalPathVariable + ";" + Path.GetDirectoryName(libraryPath);
+                Environment.SetEnvironmentVariable("PATH", pathVariable);
+
+                libraryPointer = NativeMethods.LoadLibrary(libraryPath);
+
+                Environment.SetEnvironmentVariable("PATH", originalPathVariable);
+
+                if (libraryPointer != IntPtr.Zero)
+                {
+                    return new MaybeIntPtr(libraryPointer);
+                }
+
+                exceptions.Add(new Win32Exception());
+
+                return new MaybeIntPtr(exceptions.ToArray());
+            }
+
+            public void FreeLibrary(IntPtr libraryPointer)
+            {
+                NativeMethods.FreeLibrary(libraryPointer);
+            }
+
+            public MaybeIntPtr GetFunctionPointer(IntPtr libraryPointer, string functionName)
+            {
+                var functionPointer = NativeMethods.GetProcAddress(libraryPointer, functionName);
+
+                if (functionPointer != IntPtr.Zero)
+                {
+                    return new MaybeIntPtr(functionPointer);
+                }
+
+                return new MaybeIntPtr(new Exception[] { new Win32Exception() });
+            }
+
+            private static class NativeMethods
+            {
+                [DllImport("kernel32.dll", EntryPoint = "LoadLibraryEx", BestFitMapping = false, ThrowOnUnmappableChar = true, SetLastError = true)]
+                public static extern IntPtr LoadLibraryEx([MarshalAs(UnmanagedType.LPStr)] string lpFileName, IntPtr hReservedNull, LoadLibraryFlags dwFlags);
+
+                [DllImport("kernel32.dll", EntryPoint = "LoadLibrary", BestFitMapping = false, ThrowOnUnmappableChar = true, SetLastError = true)]
+                public static extern IntPtr LoadLibrary([MarshalAs(UnmanagedType.LPStr)] string lpLibFileName);
+
+                [DllImport("kernel32.dll", EntryPoint = "GetProcAddress", BestFitMapping = false, ThrowOnUnmappableChar = true, SetLastError = true)]
+                public static extern IntPtr GetProcAddress(IntPtr hModule, [MarshalAs(UnmanagedType.LPStr)] string lpProcName);
+
+                [DllImport("kernel32.dll", EntryPoint = "FreeLibrary", SetLastError = true)]
+                public static extern bool FreeLibrary(IntPtr hModule);
+            }
+
+            [Flags]
+            private enum LoadLibraryFlags : uint
+            {
+                DONT_RESOLVE_DLL_REFERENCES = 0x00000001,
+                LOAD_LIBRARY_AS_DATAFILE = 0x00000002,
+                LOAD_WITH_ALTERED_SEARCH_PATH = 0x00000008,
+                LOAD_IGNORE_CODE_AUTHZ_LEVEL = 0x00000010,
+                LOAD_LIBRARY_AS_IMAGE_RESOURCE = 0x00000020,
+                LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE = 0x00000040,
+                LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR = 0x00000100,
+                LOAD_LIBRARY_SEARCH_APPLICATION_DIR = 0x00000200,
+                LOAD_LIBRARY_SEARCH_USER_DIRS = 0x00000400,
+                LOAD_LIBRARY_SEARCH_SYSTEM32 = 0x00000800,
+                LOAD_LIBRARY_SEARCH_DEFAULT_DIRS = 0x00001000,
+            }
         }
     }
 
