@@ -157,7 +157,7 @@ namespace Rock.Reflection
                 if (TryGetWritableDirectory(
                     candidateLocation, libraryName, hash, out directory, ref exception))
                 {
-                    Debug.Assert(directory != null, "'diretory' must not be null if TryGetWritableDirectory returns true.");
+                    Debug.Assert(directory != null, "'directory' must not be null if TryGetWritableDirectory returns true.");
                     break;
                 }
                 exceptions.Add(exception);
