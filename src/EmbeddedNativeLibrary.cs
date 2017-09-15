@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -120,7 +121,7 @@ namespace Rock.Reflection
             if (functionName == null) throw new ArgumentNullException("functionName");
             if (functionName == "") throw new ArgumentException("'functionName' must not be empty.", "functionName");
 
-            if (!typeof(Delegate).IsAssignableFrom(typeof(TDelegate)))
+            if (!typeof(Delegate).GetTypeInfo().IsAssignableFrom(typeof(TDelegate)))
             {
                 throw new InvalidOperationException("TDelegate must be a delegate.");
             }
@@ -134,8 +135,7 @@ namespace Rock.Reflection
                     maybePointer.Exceptions);
             }
 
-            return (TDelegate)(object)Marshal.GetDelegateForFunctionPointer(
-                maybePointer.Value, typeof(TDelegate));
+            return Marshal.GetDelegateForFunctionPointer<TDelegate>(maybePointer.Value);
         }
 
         private static ILibraryLoader GetLibraryLoader()
@@ -243,7 +243,7 @@ namespace Rock.Reflection
 
         private static byte[] LoadResource(string resourceName)
         {
-            var stream = typeof(EmbeddedNativeLibrary).Assembly.GetManifestResourceStream(resourceName);
+            var stream = typeof(EmbeddedNativeLibrary).GetTypeInfo().Assembly.GetManifestResourceStream(resourceName);
 
             if (stream == null)
             {
@@ -481,7 +481,6 @@ namespace Rock.Reflection
     /// An exception thrown when a problem is encountered when loading a native library or
     /// a native library's function.
     /// </summary>
-    [Serializable]
     public sealed class EmbeddedNativeLibraryException : AggregateException
     {
         /// <summary>
