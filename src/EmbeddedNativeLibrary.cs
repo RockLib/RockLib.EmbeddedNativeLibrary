@@ -53,7 +53,7 @@ namespace Rock.Reflection
             {
                 var exceptions = new List<Exception>();
 
-                foreach (var dllInfo in dllInfos)
+                foreach (var dllInfo in dllInfos.Where(info => RuntimeMatchesTarget(info.TargetRuntime)))
                 {
                     var libraryPath = GetLibraryPath(libraryName, dllInfo);
                     var maybePointer = _libraryLoader.LoadLibrary(libraryPath);
@@ -76,6 +76,21 @@ namespace Rock.Reflection
                     "Unable to load library from resources: " + string.Join(", ", dllInfos.Select(dll => dll.ResourceName)),
                     exceptions.ToArray());
             });
+        }
+
+        private bool RuntimeMatchesTarget(TargetRuntime targetRuntime)
+        {
+            switch (targetRuntime)
+            {
+                case TargetRuntime.Windows:
+                    return _runtimeOS == RuntimeOS.Windows;
+                case TargetRuntime.Win32:
+                    return _runtimeOS == RuntimeOS.Windows && IntPtr.Size == 4;
+                case TargetRuntime.Win64:
+                    return _runtimeOS == RuntimeOS.Windows && IntPtr.Size == 8;
+                default:
+                    return false;
+            }
         }
 
         /// <summary>
