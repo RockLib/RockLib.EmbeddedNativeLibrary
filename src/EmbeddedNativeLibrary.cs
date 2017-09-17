@@ -20,7 +20,8 @@ namespace Rock.Reflection
     /// </summary>
     internal sealed class EmbeddedNativeLibrary : IDisposable
     {
-        private static readonly ILibraryLoader _libraryLoader = GetLibraryLoader();
+        private static readonly RuntimeOS _runtimeOS = GetRuntimeOS();
+        private static readonly ILibraryLoader _libraryLoader = GetLibraryLoader(_runtimeOS);
 
         private readonly Lazy<IntPtr> _libraryPointer;
 
@@ -138,9 +139,48 @@ namespace Rock.Reflection
             return Marshal.GetDelegateForFunctionPointer<TDelegate>(maybePointer.Value);
         }
 
-        private static ILibraryLoader GetLibraryLoader()
+        private static ILibraryLoader GetLibraryLoader(RuntimeOS os)
         {
-            return new WindowsLibraryLoader();
+            switch (os)
+            {
+                case RuntimeOS.Windows:
+                    return new WindowsLibraryLoader();
+                case RuntimeOS.Mac:
+                case RuntimeOS.Linux:
+                default:
+                    return new NullLibraryLoader();
+            }
+        }
+
+        private static RuntimeOS GetRuntimeOS()
+        {
+            string windir = Environment.GetEnvironmentVariable("windir");
+            if (!string.IsNullOrEmpty(windir) && windir.Contains(@"\") && Directory.Exists(windir))
+            {
+                return RuntimeOS.Windows;
+            }
+            else if (File.Exists(@"/proc/sys/kernel/ostype"))
+            {
+                string osType = File.ReadAllText(@"/proc/sys/kernel/ostype");
+                if (osType.StartsWith("Linux", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Note: Android gets here too
+                    return RuntimeOS.Linux;
+                }
+                else
+                {
+                    throw new PlatformNotSupportedException(osType);
+                }
+            }
+            else if (File.Exists(@"/System/Library/CoreServices/SystemVersion.plist"))
+            {
+                // Note: iOS gets here too
+                return RuntimeOS.Mac;
+            }
+            else
+            {
+                throw new PlatformNotSupportedException();
+            }
         }
 
         private static string GetLibraryPath(string libraryName, DllInfo dllInfo)
@@ -413,6 +453,37 @@ namespace Rock.Reflection
                 LOAD_LIBRARY_SEARCH_SYSTEM32 = 0x00000800,
                 LOAD_LIBRARY_SEARCH_DEFAULT_DIRS = 0x00001000,
             }
+        }
+
+        private class NullLibraryLoader : ILibraryLoader
+        {
+            private static readonly string[] _empty = new string[0];
+
+            public string[] CandidateLocations
+            {
+                get { return _empty; }
+            }
+
+            public void FreeLibrary(IntPtr libraryPointer)
+            {
+            }
+
+            public MaybeIntPtr GetFunctionPointer(IntPtr libraryPointer, string functionName)
+            {
+                throw new NotImplementedException();
+            }
+
+            public MaybeIntPtr LoadLibrary(string libraryPath)
+            {
+                return new MaybeIntPtr(IntPtr.Zero);
+            }
+        }
+
+        private enum RuntimeOS
+        {
+            Windows,
+            Mac,
+            Linux
         }
     }
 
