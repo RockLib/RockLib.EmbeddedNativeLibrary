@@ -26,6 +26,27 @@ namespace Rock.Reflection
         private readonly Lazy<IntPtr> _libraryPointer;
 
         /// <summary>
+        /// Loads the native library defined by a list of <see cref="DllInfo"/> objects.
+        /// </summary>
+        /// <param name="libraryName">The name of the library.</param>
+        /// <param name="dllInfos">A collection of <see cref="DllInfo"/> objects.</param>
+        /// <returns>True, if the native library was loaded, or false if the library failed to load.</returns>
+        public static bool Load(string libraryName, params DllInfo[] dllInfos)
+        {
+            var library = new EmbeddedNativeLibrary(libraryName, dllInfos);
+
+            try
+            {
+                var libraryPointer = library._libraryPointer.Value;
+                return libraryPointer != IntPtr.Zero;
+            }
+            catch (EmbeddedNativeLibraryException)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="EmbeddedNativeLibrary"/> class.
         /// </summary>
         /// <param name="libraryName">The name of the library.</param>
