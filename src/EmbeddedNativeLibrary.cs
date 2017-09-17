@@ -588,6 +588,9 @@ namespace Rock.Reflection
             _additionalResourceNames = additionalResourceNames ?? new string[0];
         }
 
+        /// <summary>
+        /// Gets the runtime that this <see cref="DllInfo"/> targets.
+        /// </summary>
         public TargetRuntime TargetRuntime
         {
             get { return _targetRuntime; }
@@ -610,10 +613,24 @@ namespace Rock.Reflection
         }
     }
 
+    /// <summary>
+    /// Defines the target runtimes that are supported by the <see cref="DllInfo"/> class.
+    /// </summary>
     internal enum TargetRuntime
     {
+        /// <summary>
+        /// A windows environment. Whether it is 32-bit or 64-bit is unspecified.
+        /// </summary>
         Windows,
+
+        /// <summary>
+        /// A windows 32-bit environment.
+        /// </summary>
         Win32,
+
+        /// <summary>
+        /// A Windows 64-bit environment.
+        /// </summary>
         Win64
     }
 
