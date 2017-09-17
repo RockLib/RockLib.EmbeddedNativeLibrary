@@ -40,7 +40,7 @@ namespace Rock.Reflection
                 var libraryPointer = library._libraryPointer.Value;
                 return libraryPointer != IntPtr.Zero;
             }
-            catch (EmbeddedNativeLibraryException)
+            catch
             {
                 return false;
             }
@@ -93,7 +93,7 @@ namespace Rock.Reflection
                         maybePointer.Exceptions));
                 }
 
-                throw new EmbeddedNativeLibraryException(
+                throw new AggregateException(
                     "Unable to load library from resources: " + string.Join(", ", dllInfos.Select(dll => dll.ResourceName)),
                     exceptions.ToArray());
             });
@@ -145,10 +145,10 @@ namespace Rock.Reflection
         /// <exception cref="ArgumentException">
         /// <paramref name="functionName"/> is empty.
         /// </exception>
-        /// <exception cref="System.InvalidOperationException">
+        /// <exception cref="InvalidOperationException">
         /// TDelegate is not delegate.
         /// </exception>
-        /// <exception cref="EmbeddedNativeLibraryException">
+        /// <exception cref="AggregateException">
         /// Unable to load the native library.
         /// or
         /// Unable to get a pointer to the function.
@@ -167,7 +167,7 @@ namespace Rock.Reflection
 
             if (!maybePointer.HasValue)
             {
-                throw new EmbeddedNativeLibraryException(
+                throw new AggregateException(
                     "Unable to load function: " + functionName,
                     maybePointer.Exceptions);
             }
@@ -241,7 +241,7 @@ namespace Rock.Reflection
 
             if (directory == null)
             {
-                throw new EmbeddedNativeLibraryException(
+                throw new AggregateException(
                     string.Format(
                         "Unable to obtain writable file path in candidate locations: {0}.",
                         string.Join(", ", _libraryLoader.CandidateLocations.Select(x => "'" + x + "'"))),
@@ -653,30 +653,5 @@ namespace Rock.Reflection
         /// A Windows 64-bit environment.
         /// </summary>
         Win64
-    }
-
-    /// <summary>
-    /// An exception thrown when a problem is encountered when loading a native library or
-    /// a native library's function.
-    /// </summary>
-    public sealed class EmbeddedNativeLibraryException : AggregateException
-    {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="EmbeddedNativeLibraryException"/> class
-        /// with a specified error message and references to the inner exceptions that are the
-        /// cause of this exception. 
-        /// </summary>
-        /// <param name="message">The error message that explains the reason for the exception.</param>
-        /// <param name="exceptions">The exceptions that are the cause of the current exception.</param>
-        /// <exception cref="ArgumentNullException">
-        /// <paramref name="exceptions"/> argument is null.
-        /// </exception>
-        /// <exception cref="ArgumentException">
-        /// <paramref name="exceptions"/> has any null elements.
-        /// </exception>
-        internal EmbeddedNativeLibraryException(string message, params Exception[] exceptions)
-            : base(message, exceptions)
-        {
-        }
     }
 }
