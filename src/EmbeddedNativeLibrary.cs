@@ -422,6 +422,8 @@ namespace Rock.Reflection
     /// </summary>
     internal sealed class DllInfo
     {
+        private static IReadOnlyCollection<string> _assemblyManifestResourceNames = typeof(DllInfo).GetTypeInfo().Assembly.GetManifestResourceNames().Select(n => n.ToLowerInvariant()).ToList().AsReadOnly();
+
         private readonly TargetRuntime _targetRuntime;
         private readonly string _resourceName;
         private readonly string[] _additionalResourceNames;
@@ -440,9 +442,13 @@ namespace Rock.Reflection
         /// <exception cref="ArgumentException">
         /// <paramref name="resourceName"/> is empty.
         /// or
+        /// <paramref name="resourceName"/> is not found in this assembly's manifest resource names.
+        /// or
         /// <paramref name="additionalResourceNames"/> has any null elements.
         /// or
         /// <paramref name="additionalResourceNames"/> has any empty elements.
+        /// or
+        /// <paramref name="additionalResourceNames"/> has any elements that are not found in this assembly's manifest resource names.
         /// </exception>
         public DllInfo(string resourceName, params string[] additionalResourceNames)
             : this(TargetRuntime.Windows, resourceName, additionalResourceNames)
@@ -463,14 +469,21 @@ namespace Rock.Reflection
         /// <exception cref="ArgumentException">
         /// <paramref name="resourceName"/> is empty.
         /// or
+        /// <paramref name="resourceName"/> is not found in this assembly's manifest resource names.
+        /// or
         /// <paramref name="additionalResourceNames"/> has any null elements.
         /// or
         /// <paramref name="additionalResourceNames"/> has any empty elements.
+        /// or
+        /// <paramref name="additionalResourceNames"/> has any elements that are not found in this assembly's manifest resource names.
         /// </exception>
         public DllInfo(TargetRuntime targetRuntime, string resourceName, params string[] additionalResourceNames)
         {
             if (resourceName == null) throw new ArgumentNullException("resourceName");
             if (resourceName == "") throw new ArgumentException("'resourceName' must not be empty.", "resourceName");
+            if (!_assemblyManifestResourceNames.Contains(resourceName.ToLowerInvariant()))
+                throw new ArgumentException(string.Format("Resource '{0}' was not found in the assembly manifest resource names: {1}",
+                    resourceName, string.Join(", ", _assemblyManifestResourceNames.Select(n => "'" + n + "'"))), "resourceName");
 
             if (additionalResourceNames != null)
             {
@@ -478,6 +491,9 @@ namespace Rock.Reflection
                 {
                     if (additionalResourceName == null) throw new ArgumentException("Elements of 'additionalResourceNames' must not be null.", "additionalResourceNames");
                     if (additionalResourceName == "") throw new ArgumentException("Elements of 'additionalResourceNames' must not be empty.", "additionalResourceNames");
+                    if (!_assemblyManifestResourceNames.Contains(additionalResourceName.ToLowerInvariant()))
+                        throw new ArgumentException(string.Format("Additional resource '{0}' was not found in the assembly manifest resource names: {1}",
+                            additionalResourceName, string.Join(", ", _assemblyManifestResourceNames.Select(n => "'" + n + "'"))), "additionalResourceNames");
                 }
             }
 
