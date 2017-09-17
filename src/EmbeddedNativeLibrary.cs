@@ -422,11 +422,13 @@ namespace Rock.Reflection
     /// </summary>
     internal sealed class DllInfo
     {
+        private readonly TargetRuntime _targetRuntime;
         private readonly string _resourceName;
         private readonly string[] _additionalResourceNames;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="DllInfo"/> class.
+        /// Initializes a new instance of the <see cref="DllInfo"/> class, assuming the target runtime to be
+        /// <see cref="TargetRuntime.Windows"/>.
         /// </summary>
         /// <param name="resourceName">The resource name of the main DLL to be loaded.</param>
         /// <param name="additionalResourceNames">
@@ -443,6 +445,29 @@ namespace Rock.Reflection
         /// <paramref name="additionalResourceNames"/> has any empty elements.
         /// </exception>
         public DllInfo(string resourceName, params string[] additionalResourceNames)
+            : this(TargetRuntime.Windows, resourceName, additionalResourceNames)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="DllInfo"/> class.
+        /// </summary>
+        /// <param name="targetRuntime">The runtime that this <see cref="DllInfo"/> targets.</param>
+        /// <param name="resourceName">The resource name of the main DLL to be loaded.</param>
+        /// <param name="additionalResourceNames">
+        /// The resource names of any additional DLLs that neede to be loaded.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// <paramref name="resourceName"/> is null.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// <paramref name="resourceName"/> is empty.
+        /// or
+        /// <paramref name="additionalResourceNames"/> has any null elements.
+        /// or
+        /// <paramref name="additionalResourceNames"/> has any empty elements.
+        /// </exception>
+        public DllInfo(TargetRuntime targetRuntime, string resourceName, params string[] additionalResourceNames)
         {
             if (resourceName == null) throw new ArgumentNullException("resourceName");
             if (resourceName == "") throw new ArgumentException("'resourceName' must not be empty.", "resourceName");
@@ -456,8 +481,14 @@ namespace Rock.Reflection
                 }
             }
 
+            _targetRuntime = targetRuntime;
             _resourceName = resourceName;
             _additionalResourceNames = additionalResourceNames ?? new string[0];
+        }
+
+        public TargetRuntime TargetRuntime
+        {
+            get { return _targetRuntime; }
         }
 
         /// <summary>
@@ -475,6 +506,13 @@ namespace Rock.Reflection
         {
             get { return _additionalResourceNames; }
         }
+    }
+
+    internal enum TargetRuntime
+    {
+        Windows,
+        Win32,
+        Win64
     }
 
     /// <summary>
