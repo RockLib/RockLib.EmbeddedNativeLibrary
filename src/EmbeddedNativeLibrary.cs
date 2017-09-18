@@ -529,7 +529,7 @@ namespace Rock.Reflection
     /// </summary>
     internal sealed class DllInfo
     {
-        private static IReadOnlyCollection<string> _assemblyManifestResourceNames = typeof(DllInfo).GetTypeInfo().Assembly.GetManifestResourceNames().Select(n => n.ToLowerInvariant()).ToList().AsReadOnly();
+        private static readonly IReadOnlyCollection<string> _assemblyManifestResourceNames = typeof(DllInfo).GetTypeInfo().Assembly.GetManifestResourceNames().Select(n => n.ToLowerInvariant()).ToList().AsReadOnly();
 
         private readonly TargetRuntime _targetRuntime;
         private readonly string _resourceName;
