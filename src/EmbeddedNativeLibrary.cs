@@ -20,6 +20,8 @@ namespace Rock.Reflection
     /// </summary>
     internal sealed class EmbeddedNativeLibrary : IDisposable
     {
+        private const bool _defaultPreferEmbeddedOverInstalled = true;
+
         private static readonly RuntimeOS _runtimeOS = GetRuntimeOS();
         private static readonly ILibraryLoader _libraryLoader = GetLibraryLoader(_runtimeOS);
 
@@ -33,12 +35,28 @@ namespace Rock.Reflection
         /// <returns>True, if the native library was loaded, or false if the library failed to load.</returns>
         public static bool Load(string libraryName, params DllInfo[] dllInfos)
         {
+            return Load(libraryName, _defaultPreferEmbeddedOverInstalled, dllInfos);
+        }
+
+        /// <summary>
+        /// Loads the native library defined by a list of <see cref="DllInfo"/> objects.
+        /// </summary>
+        /// <param name="libraryName">The name of the library.</param>
+        /// <param name="preferEmbeddedOverInstalled">
+        /// If true, loading the embedded native library is attempted first and if it fails, then loading
+        /// the native library from the operating system's default load paths is attempted. If false,
+        /// the installed library is attempted first and the embedded library is attempted second.
+        /// </param>
+        /// <param name="dllInfos">A collection of <see cref="DllInfo"/> objects.</param>
+        /// <returns>True, if the native library was loaded, or false if the library failed to load.</returns>
+        public static bool Load(string libraryName, bool preferEmbeddedOverInstalled, params DllInfo[] dllInfos)
+        {
             if (_runtimeOS != RuntimeOS.Windows)
             {
                 return false;
             }
 
-            var library = new EmbeddedNativeLibrary(libraryName, dllInfos);
+            var library = new EmbeddedNativeLibrary(libraryName, preferEmbeddedOverInstalled, dllInfos);
 
             try
             {
@@ -69,6 +87,33 @@ namespace Rock.Reflection
         /// <paramref name="dllInfos"/> is empty.
         /// </exception>
         public EmbeddedNativeLibrary(string libraryName, params DllInfo[] dllInfos)
+            : this(libraryName, _defaultPreferEmbeddedOverInstalled, dllInfos)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="EmbeddedNativeLibrary"/> class.
+        /// </summary>
+        /// <param name="libraryName">The name of the library.</param>
+        /// <param name="preferEmbeddedOverInstalled">
+        /// If true, loading the embedded native library is attempted first and if it fails, then loading
+        /// the native library from the operating system's default load paths is attempted. If false,
+        /// the installed library is attempted first and the embedded library is attempted second.
+        /// </param>
+        /// <param name="dllInfos">
+        /// A collection of <see cref="DllInfo"/> objects that describe the native library.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// <paramref name="libraryName"/> is null.
+        /// or
+        /// <paramref name="dllInfos"/> is null.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// <paramref name="libraryName"/> is empty.
+        /// or
+        /// <paramref name="dllInfos"/> is empty.
+        /// </exception>
+        public EmbeddedNativeLibrary(string libraryName, bool preferEmbeddedOverInstalled, params DllInfo[] dllInfos)
         {
             if (libraryName == null) throw new ArgumentNullException("libraryName");
             if (dllInfos == null) throw new ArgumentNullException("dllInfos");
@@ -79,6 +124,40 @@ namespace Rock.Reflection
             {
                 var exceptions = new List<Exception>();
 
+                IntPtr libraryPointer;
+
+                if (preferEmbeddedOverInstalled)
+                {
+                    libraryPointer = LoadFromDllInfos(libraryName, dllInfos, exceptions);
+                    if (libraryPointer != IntPtr.Zero)
+                    {
+                        return libraryPointer;
+                    }
+                }
+
+                libraryPointer = LoadFromInstall(libraryName);
+                if (libraryPointer != IntPtr.Zero)
+                {
+                    return libraryPointer;
+                }
+
+                if (!preferEmbeddedOverInstalled)
+                {
+                    libraryPointer = LoadFromDllInfos(libraryName, dllInfos, exceptions);
+                    if (libraryPointer != IntPtr.Zero)
+                    {
+                        return libraryPointer;
+                    }
+                }
+
+                throw new AggregateException(
+                    "Unable to load library from resources: " + string.Join(", ", dllInfos.Select(dll => dll.ResourceName)),
+                    exceptions.ToArray());
+            });
+        }
+
+        private IntPtr LoadFromDllInfos(string libraryName, DllInfo[] dllInfos, List<Exception> exceptions)
+        {
                 foreach (var dllInfo in dllInfos.Where(info => RuntimeMatchesTarget(info.TargetRuntime)))
                 {
                     var libraryPath = GetLibraryPath(libraryName, dllInfo);
@@ -98,10 +177,22 @@ namespace Rock.Reflection
                         maybePointer.Exceptions));
                 }
 
-                throw new AggregateException(
-                    "Unable to load library from resources: " + string.Join(", ", dllInfos.Select(dll => dll.ResourceName)),
-                    exceptions.ToArray());
-            });
+            return IntPtr.Zero;
+        }
+
+        private IntPtr LoadFromInstall(string libraryName)
+        {
+            foreach (var installPath in _libraryLoader.GetInstallPathCandidates(libraryName))
+            {
+                var maybePointer = _libraryLoader.LoadLibrary(installPath);
+
+                if (maybePointer.HasValue)
+                {
+                    return maybePointer.Value;
+                }
+            }
+
+            return IntPtr.Zero;
         }
 
         private bool RuntimeMatchesTarget(TargetRuntime targetRuntime)
@@ -361,6 +452,7 @@ namespace Rock.Reflection
         private interface ILibraryLoader
         {
             string[] CandidateLocations { get; }
+            IEnumerable<string> GetInstallPathCandidates(string libraryName);
             MaybeIntPtr LoadLibrary(string libraryPath);
             void FreeLibrary(IntPtr libraryPointer);
             MaybeIntPtr GetFunctionPointer(IntPtr libraryPointer, string functionName);
@@ -415,6 +507,8 @@ namespace Rock.Reflection
             }
 
             public string[] CandidateLocations { get { return _candidateLocations; } }
+
+            public IEnumerable<string> GetInstallPathCandidates(string libraryName) { return Enumerable.Empty<string>(); }
 
             public MaybeIntPtr LoadLibrary(string libraryPath)
             {
@@ -504,6 +598,8 @@ namespace Rock.Reflection
             {
                 get { return _empty; }
             }
+
+            public IEnumerable<string> GetInstallPathCandidates(string libraryName) { return _empty; }
 
             public void FreeLibrary(IntPtr libraryPointer)
             {
