@@ -251,13 +251,7 @@ namespace Rock.Reflection
         /// </exception>
         public TDelegate GetDelegate<TDelegate>(string functionName)
         {
-            if (functionName == null) throw new ArgumentNullException("functionName");
-            if (functionName == "") throw new ArgumentException("'functionName' must not be empty.", "functionName");
-
-            if (!typeof(Delegate).GetTypeInfo().IsAssignableFrom(typeof(TDelegate)))
-            {
-                throw new InvalidOperationException("TDelegate must be a delegate.");
-            }
+            ValidateGetDelegate<TDelegate>(functionName);
 
             var maybePointer = _libraryLoader.GetFunctionPointer(_libraryPointer.Value, functionName);
 
@@ -269,6 +263,46 @@ namespace Rock.Reflection
             }
 
             return Marshal.GetDelegateForFunctionPointer<TDelegate>(maybePointer.Value);
+        }
+
+        /// <summary>
+        /// Gets a lazy object that, when unwrapped, returns a delegate that executes
+        /// the native function identified by <paramref name="functionName"/>.
+        /// </summary>
+        /// <typeparam name="TDelegate">The type of the delegate.</typeparam>
+        /// <param name="functionName">The name of the native function.</param>
+        /// <returns>A delegate that executes the native function.</returns>
+        /// <exception cref="ArgumentNullException">
+        /// <paramref name="functionName"/> is null.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// <paramref name="functionName"/> is empty.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        /// TDelegate is not delegate.
+        /// </exception>
+        /// <exception cref="AggregateException">
+        /// When the lazy object unwrapped:
+        /// Unable to load the native library.
+        /// or
+        /// Unable to get a pointer to the function.
+        /// </exception>
+        public Lazy<TDelegate> GetLazyDelegate<TDelegate>(string functionName)
+        {
+            ValidateGetDelegate<TDelegate>(functionName);
+
+            return new Lazy<TDelegate>(() => GetDelegate<TDelegate>(functionName));
+        }
+
+        private static void ValidateGetDelegate<TDelegate>(string functionName)
+        {
+            if (functionName == null) throw new ArgumentNullException("functionName");
+            if (functionName == "") throw new ArgumentException("'functionName' must not be empty.", "functionName");
+
+            if (!typeof(Delegate).GetTypeInfo().IsAssignableFrom(typeof(TDelegate)))
+            {
+                throw new InvalidOperationException("TDelegate must be a delegate.");
+            }
         }
 
         private static ILibraryLoader GetLibraryLoader(RuntimeOS os)
