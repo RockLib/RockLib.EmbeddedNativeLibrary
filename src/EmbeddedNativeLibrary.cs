@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -33,6 +33,11 @@ namespace Rock.Reflection
         /// <returns>True, if the native library was loaded, or false if the library failed to load.</returns>
         public static bool Load(string libraryName, params DllInfo[] dllInfos)
         {
+            if (_runtimeOS != RuntimeOS.Windows)
+            {
+                return false;
+            }
+
             var library = new EmbeddedNativeLibrary(libraryName, dllInfos);
 
             try
