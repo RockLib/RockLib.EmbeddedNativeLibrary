@@ -205,6 +205,8 @@ namespace Rock.Reflection
                     return _runtimeOS == RuntimeOS.Windows && IntPtr.Size == 4;
                 case TargetRuntime.Win64:
                     return _runtimeOS == RuntimeOS.Windows && IntPtr.Size == 8;
+                case TargetRuntime.Mac:
+                    return _runtimeOS == RuntimeOS.Mac;
                 case TargetRuntime.Linux:
                     return _runtimeOS == RuntimeOS.Linux;
                 default:
@@ -313,9 +315,10 @@ namespace Rock.Reflection
             {
                 case RuntimeOS.Windows:
                     return new WindowsLibraryLoader();
+                case RuntimeOS.Mac:
+                    return new MacLibraryLoader();
                 case RuntimeOS.Linux:
                     return new LinuxLibraryLoader();
-                case RuntimeOS.Mac:
                 default:
                     return new NullLibraryLoader();
             }
@@ -429,7 +432,7 @@ namespace Rock.Reflection
 
         private static string WriteDll(byte[] dllData, string resourceName, string directory)
         {
-            var fileName = Regex.Match(resourceName, @"[^.]+\.(?:dll|exe|so)").Value;
+            var fileName = Regex.Match(resourceName, @"[^.]+\.(?:dll|exe|so|dylib)").Value;
             var path = Path.Combine(directory, fileName);
 
             if (!File.Exists(path))
@@ -624,6 +627,73 @@ namespace Rock.Reflection
                 LOAD_LIBRARY_SEARCH_USER_DIRS = 0x00000400,
                 LOAD_LIBRARY_SEARCH_SYSTEM32 = 0x00000800,
                 LOAD_LIBRARY_SEARCH_DEFAULT_DIRS = 0x00001000,
+            }
+        }
+
+        private class MacLibraryLoader : ILibraryLoader
+        {
+            private static readonly string[] _candidateLocations = new[] { "/tmp", "/var/tmp", "/private/tmp" };
+
+            public string[] CandidateLocations { get { return _candidateLocations; } } // TODO: Implement
+
+            public IEnumerable<string> GetInstallPathCandidates(string libraryName) => Enumerable.Empty<string>();
+
+            public MaybeIntPtr LoadLibrary(string libraryPath)
+            {
+                var exceptions = new List<Exception>();
+
+                var libraryPointer = NativeMethods.dlopen(libraryPath, dlopenFlags.RTLD_LAZY | dlopenFlags.RTLD_GLOBAL);
+
+                if (libraryPointer != IntPtr.Zero)
+                {
+                    return new MaybeIntPtr(libraryPointer);
+                }
+
+                exceptions.Add(new Exception(NativeMethods.dlerror()));
+                return new MaybeIntPtr(exceptions.ToArray());
+            }
+
+            public void FreeLibrary(IntPtr libraryPointer)
+            {
+                NativeMethods.dlclose(libraryPointer);
+            }
+
+            public MaybeIntPtr GetFunctionPointer(IntPtr libraryPointer, string functionName)
+            {   
+                var functionPointer = NativeMethods.dlsym(libraryPointer, functionName);
+
+                if (functionPointer != IntPtr.Zero)
+                {
+                    return new MaybeIntPtr(functionPointer);
+                }
+
+                return new MaybeIntPtr(new Exception[] { new Exception(NativeMethods.dlerror()) });
+            }
+
+            private static class NativeMethods
+            {
+                [DllImport("libSystem.dylib")]
+                public static extern IntPtr dlopen(string filename, dlopenFlags flags);
+
+                [DllImport("libSystem.dylib")]
+                public static extern string dlerror();
+
+                [DllImport("libSystem.dylib")]
+                public static extern IntPtr dlsym(IntPtr handle, string symbol);
+
+                [DllImport("libSystem.dylib")]
+                public static extern IntPtr dlclose(IntPtr handle);
+            }
+            
+            [Flags]
+            private enum dlopenFlags
+            {
+                RTLD_LAZY = 0x1,
+                RTLD_NOW = 0x2,
+                RTLD_LOCAL = 0x4,
+                RTLD_GLOBAL = 0x8,
+                RTLD_NOLOAD = 0x10,
+                RTLD_NODELETE = 0x80,
             }
         }
 
@@ -926,6 +996,11 @@ namespace Rock.Reflection
         /// A Windows 64-bit environment.
         /// </summary>
         Win64,
+
+        /// <summary>
+        /// A Mac environment.
+        /// </summary>
+        Mac,
 
         /// <summary>
         /// A Linux environment.
