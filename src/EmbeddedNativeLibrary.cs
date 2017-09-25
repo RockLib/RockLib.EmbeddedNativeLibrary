@@ -363,7 +363,7 @@ namespace Rock.Reflection
             string directory = null;
 
             var exceptions = new List<Exception>();
-            foreach (var candidateLocation in _libraryLoader.CandidateLocations)
+            foreach (var candidateLocation in _libraryLoader.CandidateWritableLocations)
             {
                 Exception exception = null;
                 if (TryGetWritableDirectory(
@@ -380,7 +380,7 @@ namespace Rock.Reflection
                 throw new AggregateException(
                     string.Format(
                         "Unable to obtain writable file path in candidate locations: {0}.",
-                        string.Join(", ", _libraryLoader.CandidateLocations.Select(x => "'" + x + "'"))),
+                        string.Join(", ", _libraryLoader.CandidateWritableLocations.Select(x => "'" + x + "'"))),
                     exceptions.ToArray());
             }
 
@@ -491,7 +491,7 @@ namespace Rock.Reflection
 
         private interface ILibraryLoader
         {
-            string[] CandidateLocations { get; }
+            string[] CandidateWritableLocations { get; }
             IEnumerable<string> GetInstallPathCandidates(string libraryName);
             MaybeIntPtr LoadLibrary(string libraryPath);
             void FreeLibrary(IntPtr libraryPointer);
@@ -520,7 +520,7 @@ namespace Rock.Reflection
 
         private class WindowsLibraryLoader : ILibraryLoader
         {
-            private static readonly string[] _candidateLocations;
+            private static readonly string[] _candidateWritableLocations;
 
             static WindowsLibraryLoader()
             {
@@ -543,10 +543,10 @@ namespace Rock.Reflection
                     candidateLocations.Add(tempDirectory);
                 }
 
-                _candidateLocations = candidateLocations.ToArray();
+                _candidateWritableLocations = candidateLocations.ToArray();
             }
 
-            public string[] CandidateLocations { get { return _candidateLocations; } }
+            public string[] CandidateWritableLocations { get { return _candidateWritableLocations; } }
 
             public IEnumerable<string> GetInstallPathCandidates(string libraryName)
             {
@@ -564,14 +564,14 @@ namespace Rock.Reflection
 
             public MaybeIntPtr LoadLibrary(string libraryPath)
             {
-                var exceptions = new List<Exception>();
-
                 var libraryPointer = NativeMethods.LoadLibraryEx(libraryPath, IntPtr.Zero, LoadLibraryFlags.LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LoadLibraryFlags.LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
 
                 if (libraryPointer != IntPtr.Zero)
                 {
                     return new MaybeIntPtr(libraryPointer);
                 }
+
+                var exceptions = new List<Exception>();
 
                 exceptions.Add(new Win32Exception());
 
@@ -644,7 +644,7 @@ namespace Rock.Reflection
 
         private class UnixLibraryLoader : ILibraryLoader
         {
-            private static readonly string[] _candidateLocations = new[] { "/tmp", "/var/tmp" };
+            private static readonly string[] _candidateWritableLocations = new[] { "/tmp", "/var/tmp" };
 
             private readonly bool _isMac;
 
@@ -653,7 +653,7 @@ namespace Rock.Reflection
                 _isMac = isMac;
             }
 
-            public string[] CandidateLocations { get { return _candidateLocations; } }
+            public string[] CandidateWritableLocations { get { return _candidateWritableLocations; } }
 
             public IEnumerable<string> GetInstallPathCandidates(string libraryName)
             {
@@ -767,7 +767,7 @@ namespace Rock.Reflection
         {
             private static readonly string[] _empty = new string[0];
 
-            public string[] CandidateLocations
+            public string[] CandidateWritableLocations
             {
                 get { return _empty; }
             }
