@@ -10,8 +10,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 
-// ReSharper disable once CheckNamespace
-namespace Rock.Reflection
+namespace RockLib.Interop
 {
     /// <summary>
     /// A class that provides access to the functions of a native DLL when the DLL is
