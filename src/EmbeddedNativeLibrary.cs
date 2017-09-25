@@ -50,6 +50,11 @@ namespace RockLib.Interop
         /// <returns>True, if the native library was loaded, or false if the library failed to load.</returns>
         public static bool Load(string libraryName, bool preferEmbeddedOverInstalled, params DllInfo[] dllInfos)
         {
+            if (dllInfos != null && dllInfos.Any(info => info.TargetRuntime == TargetRuntime.Linux || info.TargetRuntime == TargetRuntime.Mac))
+            {
+                throw new ArgumentException($"Embedding a Mac or Linux native library is not supported with the {nameof(Load)} method: one or more {nameof(DllInfo)} object had a {nameof(DllInfo.TargetRuntime)} with a non-windows value.", nameof(dllInfos));
+            }
+
             if (_runtimeOS != RuntimeOS.Windows)
             {
                 return false;
