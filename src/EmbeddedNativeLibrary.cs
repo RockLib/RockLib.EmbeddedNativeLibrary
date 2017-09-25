@@ -548,7 +548,19 @@ namespace Rock.Reflection
 
             public string[] CandidateLocations { get { return _candidateLocations; } }
 
-            public IEnumerable<string> GetInstallPathCandidates(string libraryName) { return Enumerable.Empty<string>(); }
+            public IEnumerable<string> GetInstallPathCandidates(string libraryName)
+            {
+                var fullName = libraryName + ".dll";
+
+                var assembly = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
+                var potentialInstallPath = Path.Combine(Path.GetDirectoryName(assembly.Location), fullName);
+                if (File.Exists(potentialInstallPath))
+                {
+                    yield return potentialInstallPath;
+                }
+
+                yield return fullName;
+            }
 
             public MaybeIntPtr LoadLibrary(string libraryPath)
             {
