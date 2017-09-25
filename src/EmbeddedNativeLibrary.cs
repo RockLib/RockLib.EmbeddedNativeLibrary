@@ -316,9 +316,9 @@ namespace Rock.Reflection
                 case RuntimeOS.Windows:
                     return new WindowsLibraryLoader();
                 case RuntimeOS.Mac:
-                    return new MacLibraryLoader();
+                    return new UnixLibraryLoader(true);
                 case RuntimeOS.Linux:
-                    return new LinuxLibraryLoader();
+                    return new UnixLibraryLoader(false);
                 default:
                     return new NullLibraryLoader();
             }
@@ -630,196 +630,113 @@ namespace Rock.Reflection
             }
         }
 
-        private class MacLibraryLoader : ILibraryLoader
+        private class UnixLibraryLoader : ILibraryLoader
         {
-            private static readonly string[] _candidateLocations = new[] { "/tmp", "/var/tmp", "/private/tmp" };
+            private static readonly string[] _candidateLocations = new[] { "/tmp", "/var/tmp" };
 
-            public string[] CandidateLocations { get { return _candidateLocations; } } // TODO: Implement
+            private readonly bool _isMac;
 
-            public IEnumerable<string> GetInstallPathCandidates(string libraryName) => Enumerable.Empty<string>();
-
-            public MaybeIntPtr LoadLibrary(string libraryPath)
+            public UnixLibraryLoader(bool isMac)
             {
-                var exceptions = new List<Exception>();
-
-                var libraryPointer = NativeMethods.dlopen(libraryPath, dlopenFlags.RTLD_LAZY | dlopenFlags.RTLD_GLOBAL);
-
-                if (libraryPointer != IntPtr.Zero)
-                {
-                    return new MaybeIntPtr(libraryPointer);
-                }
-
-                exceptions.Add(new Exception(NativeMethods.dlerror()));
-                return new MaybeIntPtr(exceptions.ToArray());
-            }
-
-            public void FreeLibrary(IntPtr libraryPointer)
-            {
-                NativeMethods.dlclose(libraryPointer);
-            }
-
-            public MaybeIntPtr GetFunctionPointer(IntPtr libraryPointer, string functionName)
-            {   
-                var functionPointer = NativeMethods.dlsym(libraryPointer, functionName);
-
-                if (functionPointer != IntPtr.Zero)
-                {
-                    return new MaybeIntPtr(functionPointer);
-                }
-
-                return new MaybeIntPtr(new Exception[] { new Exception(NativeMethods.dlerror()) });
-            }
-
-            private static class NativeMethods
-            {
-                [DllImport("libSystem.dylib")]
-                public static extern IntPtr dlopen(string filename, dlopenFlags flags);
-
-                [DllImport("libSystem.dylib")]
-                public static extern string dlerror();
-
-                [DllImport("libSystem.dylib")]
-                public static extern IntPtr dlsym(IntPtr handle, string symbol);
-
-                [DllImport("libSystem.dylib")]
-                public static extern IntPtr dlclose(IntPtr handle);
-            }
-            
-            [Flags]
-            private enum dlopenFlags
-            {
-                RTLD_LAZY = 0x1,
-                RTLD_NOW = 0x2,
-                RTLD_LOCAL = 0x4,
-                RTLD_GLOBAL = 0x8,
-                RTLD_NOLOAD = 0x10,
-                RTLD_NODELETE = 0x80,
-            }
-        }
-
-        private class LinuxLibraryLoader : ILibraryLoader
-        {
-            private static readonly string[] _candidateLocations;
-            private static readonly string[] _installLocations;
-
-            static LinuxLibraryLoader()
-            {
-                _candidateLocations = new[] { "/tmp", "/var/tmp" };
+                _isMac = isMac;
             }
 
             public string[] CandidateLocations { get { return _candidateLocations; } }
 
             public IEnumerable<string> GetInstallPathCandidates(string libraryName)
             {
-                string potentialInstallPath;
-                var fullName = libraryName + ".so";
+                var fullName = libraryName + (_isMac ? ".dylib" : ".so");
 
-                var installLocations = new List<string>();
-
-                potentialInstallPath = Path.Combine(Path.GetDirectoryName(Assembly.GetEntryAssembly().Location), fullName);
+                var assembly = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
+                var potentialInstallPath = Path.Combine(Path.GetDirectoryName(assembly.Location), fullName);
                 if (File.Exists(potentialInstallPath))
                 {
-                    installLocations.Add(potentialInstallPath);
+                    yield return potentialInstallPath;
                 }
 
-                var ldLibraryPath = Environment.GetEnvironmentVariable("LD_LIBRARY_PATH");
-                if (!string.IsNullOrEmpty(ldLibraryPath))
-                {
-                    foreach (var path in ldLibraryPath.Split(new[] { ':' }, StringSplitOptions.RemoveEmptyEntries))
-                    {
-                        potentialInstallPath = Path.Combine(path, fullName);
-                        if (File.Exists(potentialInstallPath))
-                        {
-                            installLocations.Add(potentialInstallPath);
-                        }
-                    }
-                }
-
-                var process = Process.Start(new ProcessStartInfo
-                {
-                    FileName = "/bin/bash",
-                    Arguments = "ldconfig -p",
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                });
-
-                var ldconfigResult = process.StandardOutput.ReadToEnd();
-                process.WaitForExit();
-                var ldconfigMatch = Regex.Match(ldconfigResult, libraryName + @"\.so.*?=>\s*(.*)");
-                if (ldconfigMatch.Success)
-                {
-                    potentialInstallPath = ldconfigMatch.Groups[1].Value;
-                    if (File.Exists(potentialInstallPath))
-                    {
-                        installLocations.Add(potentialInstallPath);
-                    }
-                }
-
-                potentialInstallPath = Path.Combine("/lib", fullName);
-                if (File.Exists(potentialInstallPath))
-                {
-                    installLocations.Add(potentialInstallPath);
-                }
-
-                potentialInstallPath = Path.Combine("/usr/lib", fullName);
-                if (File.Exists(potentialInstallPath))
-                {
-                    installLocations.Add(potentialInstallPath);
-                }
-                
-                return installLocations;
+                yield return fullName;
             }
 
             public MaybeIntPtr LoadLibrary(string libraryPath)
             {
                 var exceptions = new List<Exception>();
 
-                // NativeMethods.dlerror();
-                var libraryPointer = NativeMethods.dlopen(libraryPath, dlopenFlags.RTLD_LAZY | dlopenFlags.RTLD_GLOBAL);
+                var libraryPointer = dlopen(libraryPath, dlopenFlags.RTLD_LAZY | dlopenFlags.RTLD_GLOBAL);
 
                 if (libraryPointer != IntPtr.Zero)
                 {
                     return new MaybeIntPtr(libraryPointer);
                 }
 
-                exceptions.Add(new Exception(NativeMethods.dlerror()));
-
+                exceptions.Add(new Exception(dlerror()));
                 return new MaybeIntPtr(exceptions.ToArray());
             }
 
             public void FreeLibrary(IntPtr libraryPointer)
             {
-                NativeMethods.dlclose(libraryPointer);
+                dlclose(libraryPointer);
             }
 
             public MaybeIntPtr GetFunctionPointer(IntPtr libraryPointer, string functionName)
-            {
-                var functionPointer = NativeMethods.dlsym(libraryPointer, functionName);
+            {   
+                var functionPointer = dlsym(libraryPointer, functionName);
 
                 if (functionPointer != IntPtr.Zero)
                 {
                     return new MaybeIntPtr(functionPointer);
                 }
 
-                return new MaybeIntPtr(new [] { new Exception(NativeMethods.dlerror()) });
+                return new MaybeIntPtr(new Exception[] { new Exception(dlerror()) });
             }
 
-            private static class NativeMethods
-            {// libdl.so libcoreclr.so
-                [DllImport("libdl.so")]
-                public static extern IntPtr dlopen(string filename, dlopenFlags flag);
+            private IntPtr dlopen(string filename, dlopenFlags flags) =>
+                 _isMac ? Mac.NativeMethods.dlopen(filename, flags) : Linux.NativeMethods.dlopen(filename, flags);
 
-                [DllImport("libdl.so")]
-                public static extern string dlerror();
+            private string dlerror() =>
+                _isMac ? Mac.NativeMethods.dlerror() : Linux.NativeMethods.dlerror();
 
-                [DllImport("libdl.so")]
-                public static extern IntPtr dlsym(IntPtr handle, string name);
+            private IntPtr dlsym(IntPtr handle, string symbol) =>
+                _isMac ? Mac.NativeMethods.dlsym(handle, symbol) : Linux.NativeMethods.dlsym(handle, symbol);
 
-                [DllImport("libdl.so")]
-                public static extern int dlclose(IntPtr handle);
-            }  
+            private IntPtr dlclose(IntPtr handle) =>
+                _isMac ? Mac.NativeMethods.dlclose(handle) : Linux.NativeMethods.dlclose(handle);
 
+            private static class Mac
+            {
+                internal static class NativeMethods
+                {
+                    [DllImport("libSystem.dylib")]
+                    public static extern IntPtr dlopen(string filename, dlopenFlags flags);
+
+                    [DllImport("libSystem.dylib")]
+                    public static extern string dlerror();
+
+                    [DllImport("libSystem.dylib")]
+                    public static extern IntPtr dlsym(IntPtr handle, string symbol);
+
+                    [DllImport("libSystem.dylib")]
+                    public static extern IntPtr dlclose(IntPtr handle);
+                }
+            }
+
+            private static class Linux
+            {
+                internal static class NativeMethods
+                {// libdl.so libcoreclr.so
+                    [DllImport("libdl.so")]
+                    public static extern IntPtr dlopen(string filename, dlopenFlags flag);
+
+                    [DllImport("libdl.so")]
+                    public static extern string dlerror();
+
+                    [DllImport("libdl.so")]
+                    public static extern IntPtr dlsym(IntPtr handle, string name);
+
+                    [DllImport("libdl.so")]
+                    public static extern IntPtr dlclose(IntPtr handle);
+                }
+            }
+            
             [Flags]
             private enum dlopenFlags
             {
