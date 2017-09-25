@@ -659,8 +659,6 @@ namespace Rock.Reflection
 
             public MaybeIntPtr LoadLibrary(string libraryPath)
             {
-                var exceptions = new List<Exception>();
-
                 var libraryPointer = dlopen(libraryPath, dlopenFlags.RTLD_LAZY | dlopenFlags.RTLD_GLOBAL);
 
                 if (libraryPointer != IntPtr.Zero)
@@ -668,8 +666,12 @@ namespace Rock.Reflection
                     return new MaybeIntPtr(libraryPointer);
                 }
 
-                exceptions.Add(new Exception(dlerror()));
-                return new MaybeIntPtr(exceptions.ToArray());
+                var error = dlerror();
+                if (string.IsNullOrEmpty(error))
+                {
+                    error = "Null pointer was returned from dlopen.";
+                }
+                return new MaybeIntPtr(new[] { new Exception(error) });
             }
 
             public void FreeLibrary(IntPtr libraryPointer)
