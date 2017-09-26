@@ -568,7 +568,7 @@ namespace RockLib.Interop
 
             public MaybeIntPtr LoadLibrary(string libraryPath)
             {
-                var libraryPointer = NativeMethods.LoadLibraryEx(libraryPath, IntPtr.Zero, LoadLibraryFlags.LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LoadLibraryFlags.LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+                var libraryPointer = NativeMethods.LoadLibrary(libraryPath);
 
                 if (libraryPointer != IntPtr.Zero)
                 {
@@ -576,6 +576,15 @@ namespace RockLib.Interop
                 }
 
                 var exceptions = new List<Exception>();
+
+                exceptions.Add(new Win32Exception());
+
+                libraryPointer = NativeMethods.LoadLibraryEx(libraryPath, IntPtr.Zero, LoadLibraryFlags.LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LoadLibraryFlags.LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+
+                if (libraryPointer != IntPtr.Zero)
+                {
+                    return new MaybeIntPtr(libraryPointer);
+                }
 
                 exceptions.Add(new Win32Exception());
 
