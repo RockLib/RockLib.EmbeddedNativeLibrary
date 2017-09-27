@@ -10,8 +10,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 
-// ReSharper disable once CheckNamespace
-namespace Rock.Reflection
+namespace RockLib.Interop
 {
     /// <summary>
     /// A class that provides access to the functions of a native DLL when the DLL is
@@ -20,9 +19,59 @@ namespace Rock.Reflection
     /// </summary>
     internal sealed class EmbeddedNativeLibrary : IDisposable
     {
-        private static readonly ILibraryLoader _libraryLoader = GetLibraryLoader();
+        private const bool _defaultPreferEmbeddedOverInstalled = true;
+
+        private static readonly RuntimeOS _runtimeOS = GetRuntimeOS();
+        private static readonly ILibraryLoader _libraryLoader = GetLibraryLoader(_runtimeOS);
 
         private readonly Lazy<IntPtr> _libraryPointer;
+
+        /// <summary>
+        /// Loads the native library defined by a list of <see cref="DllInfo"/> objects.
+        /// </summary>
+        /// <param name="libraryName">The name of the library.</param>
+        /// <param name="dllInfos">A collection of <see cref="DllInfo"/> objects.</param>
+        /// <returns>True, if the native library was loaded, or false if the library failed to load.</returns>
+        public static bool Load(string libraryName, params DllInfo[] dllInfos)
+        {
+            return Load(libraryName, _defaultPreferEmbeddedOverInstalled, dllInfos);
+        }
+
+        /// <summary>
+        /// Loads the native library defined by a list of <see cref="DllInfo"/> objects.
+        /// </summary>
+        /// <param name="libraryName">The name of the library.</param>
+        /// <param name="preferEmbeddedOverInstalled">
+        /// If true, loading the embedded native library is attempted first and if it fails, then loading
+        /// the native library from the operating system's default load paths is attempted. If false,
+        /// the installed library is attempted first and the embedded library is attempted second.
+        /// </param>
+        /// <param name="dllInfos">A collection of <see cref="DllInfo"/> objects.</param>
+        /// <returns>True, if the native library was loaded, or false if the library failed to load.</returns>
+        public static bool Load(string libraryName, bool preferEmbeddedOverInstalled, params DllInfo[] dllInfos)
+        {
+            if (dllInfos != null && dllInfos.Any(info => info.TargetRuntime == TargetRuntime.Linux || info.TargetRuntime == TargetRuntime.Mac))
+            {
+                throw new ArgumentException($"Embedding a Mac or Linux native library is not supported with the {nameof(Load)} method: one or more {nameof(DllInfo)} object had a {nameof(DllInfo.TargetRuntime)} with a non-windows value.", nameof(dllInfos));
+            }
+
+            if (_runtimeOS != RuntimeOS.Windows)
+            {
+                return false;
+            }
+
+            var library = new EmbeddedNativeLibrary(libraryName, preferEmbeddedOverInstalled, dllInfos);
+
+            try
+            {
+                var libraryPointer = library._libraryPointer.Value;
+                return libraryPointer != IntPtr.Zero;
+            }
+            catch
+            {
+                return false;
+            }
+        }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="EmbeddedNativeLibrary"/> class.
@@ -42,6 +91,33 @@ namespace Rock.Reflection
         /// <paramref name="dllInfos"/> is empty.
         /// </exception>
         public EmbeddedNativeLibrary(string libraryName, params DllInfo[] dllInfos)
+            : this(libraryName, _defaultPreferEmbeddedOverInstalled, dllInfos)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="EmbeddedNativeLibrary"/> class.
+        /// </summary>
+        /// <param name="libraryName">The name of the library.</param>
+        /// <param name="preferEmbeddedOverInstalled">
+        /// If true, loading the embedded native library is attempted first and if it fails, then loading
+        /// the native library from the operating system's default load paths is attempted. If false,
+        /// the installed library is attempted first and the embedded library is attempted second.
+        /// </param>
+        /// <param name="dllInfos">
+        /// A collection of <see cref="DllInfo"/> objects that describe the native library.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// <paramref name="libraryName"/> is null.
+        /// or
+        /// <paramref name="dllInfos"/> is null.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// <paramref name="libraryName"/> is empty.
+        /// or
+        /// <paramref name="dllInfos"/> is empty.
+        /// </exception>
+        public EmbeddedNativeLibrary(string libraryName, bool preferEmbeddedOverInstalled, params DllInfo[] dllInfos)
         {
             if (libraryName == null) throw new ArgumentNullException("libraryName");
             if (dllInfos == null) throw new ArgumentNullException("dllInfos");
@@ -52,29 +128,94 @@ namespace Rock.Reflection
             {
                 var exceptions = new List<Exception>();
 
-                foreach (var dllInfo in dllInfos)
-                {
-                    var libraryPath = GetLibraryPath(libraryName, dllInfo);
-                    var maybePointer = _libraryLoader.LoadLibrary(libraryPath);
+                IntPtr libraryPointer;
 
-                    if (maybePointer.HasValue)
+                if (preferEmbeddedOverInstalled)
+                {
+                    libraryPointer = LoadFromDllInfos(libraryName, dllInfos, exceptions);
+                    if (libraryPointer != IntPtr.Zero)
                     {
-                        return maybePointer.Value;
+                        return libraryPointer;
                     }
-                    
-                    exceptions.Add(new AggregateException(
-                        string.Format(
-                            "The load library operation for '{0}' failed and reported {1} exception{2}.",
-                            dllInfo.ResourceName,
-                            maybePointer.Exceptions.Length,
-                            maybePointer.Exceptions.Length > 1 ? "s" : ""),
-                        maybePointer.Exceptions));
                 }
 
-                throw new EmbeddedNativeLibraryException(
+                libraryPointer = LoadFromInstall(libraryName);
+                if (libraryPointer != IntPtr.Zero)
+                {
+                    return libraryPointer;
+                }
+
+                if (!preferEmbeddedOverInstalled)
+                {
+                    libraryPointer = LoadFromDllInfos(libraryName, dllInfos, exceptions);
+                    if (libraryPointer != IntPtr.Zero)
+                    {
+                        return libraryPointer;
+                    }
+                }
+
+                throw new AggregateException(
                     "Unable to load library from resources: " + string.Join(", ", dllInfos.Select(dll => dll.ResourceName)),
                     exceptions.ToArray());
             });
+        }
+
+        private IntPtr LoadFromDllInfos(string libraryName, DllInfo[] dllInfos, List<Exception> exceptions)
+        {
+            foreach (var dllInfo in dllInfos.Where(info => RuntimeMatchesTarget(info.TargetRuntime)))
+            {
+                var libraryPath = GetLibraryPath(libraryName, dllInfo);
+                var maybePointer = _libraryLoader.LoadLibrary(libraryPath);
+
+                if (maybePointer.HasValue)
+                {
+                    return maybePointer.Value;
+                }
+                
+                exceptions.Add(new AggregateException(
+                    string.Format(
+                        "The load library operation for '{0}' failed and reported {1} exception{2}.",
+                        dllInfo.ResourceName,
+                        maybePointer.Exceptions.Length,
+                        maybePointer.Exceptions.Length > 1 ? "s" : ""),
+                    maybePointer.Exceptions));
+            }
+
+            return IntPtr.Zero;
+        }
+
+        private IntPtr LoadFromInstall(string libraryName)
+        {
+            foreach (var installPath in _libraryLoader.GetInstallPathCandidates(libraryName))
+            {
+                var maybePointer = _libraryLoader.LoadLibrary(installPath);
+
+                if (maybePointer.HasValue)
+                {
+                    return maybePointer.Value;
+                }
+            }
+
+            return IntPtr.Zero;
+        }
+
+        private bool RuntimeMatchesTarget(TargetRuntime targetRuntime)
+        {
+            switch (targetRuntime)
+            {
+                case TargetRuntime.Windows:
+                    return _runtimeOS == RuntimeOS.Windows;
+                case TargetRuntime.Win32:
+                    return _runtimeOS == RuntimeOS.Windows && IntPtr.Size == 4;
+                case TargetRuntime.Win64:
+                    return _runtimeOS == RuntimeOS.Windows && IntPtr.Size == 8;
+                case TargetRuntime.Mac:
+                    return _runtimeOS == RuntimeOS.Mac;
+                case TargetRuntime.Linux:
+                    return _runtimeOS == RuntimeOS.Linux;
+                default:
+                    return false;
+            }
         }
 
         /// <summary>
@@ -108,15 +249,60 @@ namespace Rock.Reflection
         /// <exception cref="ArgumentException">
         /// <paramref name="functionName"/> is empty.
         /// </exception>
-        /// <exception cref="System.InvalidOperationException">
+        /// <exception cref="InvalidOperationException">
         /// TDelegate is not delegate.
         /// </exception>
-        /// <exception cref="EmbeddedNativeLibraryException">
+        /// <exception cref="AggregateException">
         /// Unable to load the native library.
         /// or
         /// Unable to get a pointer to the function.
         /// </exception>
         public TDelegate GetDelegate<TDelegate>(string functionName)
+        {
+            ValidateGetDelegate<TDelegate>(functionName);
+
+            var maybePointer = _libraryLoader.GetFunctionPointer(_libraryPointer.Value, functionName);
+
+            if (!maybePointer.HasValue)
+            {
+                throw new AggregateException(
+                    "Unable to load function: " + functionName,
+                    maybePointer.Exceptions);
+            }
+
+            return Marshal.GetDelegateForFunctionPointer<TDelegate>(maybePointer.Value);
+        }
+
+        /// <summary>
+        /// Gets a lazy object that, when unwrapped, returns a delegate that executes
+        /// the native function identified by <paramref name="functionName"/>.
+        /// </summary>
+        /// <typeparam name="TDelegate">The type of the delegate.</typeparam>
+        /// <param name="functionName">The name of the native function.</param>
+        /// <returns>A delegate that executes the native function.</returns>
+        /// <exception cref="ArgumentNullException">
+        /// <paramref name="functionName"/> is null.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// <paramref name="functionName"/> is empty.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        /// TDelegate is not delegate.
+        /// </exception>
+        /// <exception cref="AggregateException">
+        /// When the lazy object unwrapped:
+        /// Unable to load the native library.
+        /// or
+        /// Unable to get a pointer to the function.
+        /// </exception>
+        public Lazy<TDelegate> GetLazyDelegate<TDelegate>(string functionName)
+        {
+            ValidateGetDelegate<TDelegate>(functionName);
+
+            return new Lazy<TDelegate>(() => GetDelegate<TDelegate>(functionName));
+        }
+
+        private static void ValidateGetDelegate<TDelegate>(string functionName)
         {
             if (functionName == null) throw new ArgumentNullException("functionName");
             if (functionName == "") throw new ArgumentException("'functionName' must not be empty.", "functionName");
@@ -125,22 +311,52 @@ namespace Rock.Reflection
             {
                 throw new InvalidOperationException("TDelegate must be a delegate.");
             }
-
-            var maybePointer = _libraryLoader.GetFunctionPointer(_libraryPointer.Value, functionName);
-
-            if (!maybePointer.HasValue)
-            {
-                throw new EmbeddedNativeLibraryException(
-                    "Unable to load function: " + functionName,
-                    maybePointer.Exceptions);
-            }
-
-            return Marshal.GetDelegateForFunctionPointer<TDelegate>(maybePointer.Value);
         }
 
-        private static ILibraryLoader GetLibraryLoader()
+        private static ILibraryLoader GetLibraryLoader(RuntimeOS os)
         {
-            return new WindowsLibraryLoader();
+            switch (os)
+            {
+                case RuntimeOS.Windows:
+                    return new WindowsLibraryLoader();
+                case RuntimeOS.Mac:
+                    return new UnixLibraryLoader(true);
+                case RuntimeOS.Linux:
+                    return new UnixLibraryLoader(false);
+                default:
+                    return new NullLibraryLoader();
+            }
+        }
+
+        private static RuntimeOS GetRuntimeOS()
+        {
+            string windir = Environment.GetEnvironmentVariable("windir");
+            if (!string.IsNullOrEmpty(windir) && windir.Contains(@"\") && Directory.Exists(windir))
+            {
+                return RuntimeOS.Windows;
+            }
+            else if (File.Exists(@"/proc/sys/kernel/ostype"))
+            {
+                string osType = File.ReadAllText(@"/proc/sys/kernel/ostype");
+                if (osType.StartsWith("Linux", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Note: Android gets here too
+                    return RuntimeOS.Linux;
+                }
+                else
+                {
+                    throw new PlatformNotSupportedException(osType);
+                }
+            }
+            else if (File.Exists(@"/System/Library/CoreServices/SystemVersion.plist"))
+            {
+                // Note: iOS gets here too
+                return RuntimeOS.Mac;
+            }
+            else
+            {
+                throw new PlatformNotSupportedException();
+            }
         }
 
         private static string GetLibraryPath(string libraryName, DllInfo dllInfo)
@@ -151,7 +367,7 @@ namespace Rock.Reflection
             string directory = null;
 
             var exceptions = new List<Exception>();
-            foreach (var candidateLocation in _libraryLoader.CandidateLocations)
+            foreach (var candidateLocation in _libraryLoader.CandidateWritableLocations)
             {
                 Exception exception = null;
                 if (TryGetWritableDirectory(
@@ -165,10 +381,10 @@ namespace Rock.Reflection
 
             if (directory == null)
             {
-                throw new EmbeddedNativeLibraryException(
+                throw new AggregateException(
                     string.Format(
                         "Unable to obtain writable file path in candidate locations: {0}.",
-                        string.Join(", ", _libraryLoader.CandidateLocations.Select(x => "'" + x + "'"))),
+                        string.Join(", ", _libraryLoader.CandidateWritableLocations.Select(x => "'" + x + "'"))),
                     exceptions.ToArray());
             }
 
@@ -220,7 +436,7 @@ namespace Rock.Reflection
 
         private static string WriteDll(byte[] dllData, string resourceName, string directory)
         {
-            var fileName = Regex.Match(resourceName, @"[^.]+\.(?:dll|exe)").Value;
+            var fileName = Regex.Match(resourceName, @"[^.]+\.(?:dll|exe|so|dylib)").Value;
             var path = Path.Combine(directory, fileName);
 
             if (!File.Exists(path))
@@ -279,7 +495,8 @@ namespace Rock.Reflection
 
         private interface ILibraryLoader
         {
-            string[] CandidateLocations { get; }
+            string[] CandidateWritableLocations { get; }
+            IEnumerable<string> GetInstallPathCandidates(string libraryName);
             MaybeIntPtr LoadLibrary(string libraryPath);
             void FreeLibrary(IntPtr libraryPointer);
             MaybeIntPtr GetFunctionPointer(IntPtr libraryPointer, string functionName);
@@ -307,7 +524,7 @@ namespace Rock.Reflection
 
         private class WindowsLibraryLoader : ILibraryLoader
         {
-            private static readonly string[] _candidateLocations;
+            private static readonly string[] _candidateWritableLocations;
 
             static WindowsLibraryLoader()
             {
@@ -330,16 +547,39 @@ namespace Rock.Reflection
                     candidateLocations.Add(tempDirectory);
                 }
 
-                _candidateLocations = candidateLocations.ToArray();
+                _candidateWritableLocations = candidateLocations.ToArray();
             }
 
-            public string[] CandidateLocations { get { return _candidateLocations; } }
+            public string[] CandidateWritableLocations { get { return _candidateWritableLocations; } }
+
+            public IEnumerable<string> GetInstallPathCandidates(string libraryName)
+            {
+                var fullName = libraryName + ".dll";
+
+                var assembly = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
+                var potentialInstallPath = Path.Combine(Path.GetDirectoryName(assembly.Location), fullName);
+                if (File.Exists(potentialInstallPath))
+                {
+                    yield return potentialInstallPath;
+                }
+
+                yield return fullName;
+            }
 
             public MaybeIntPtr LoadLibrary(string libraryPath)
             {
+                var libraryPointer = NativeMethods.LoadLibrary(libraryPath);
+
+                if (libraryPointer != IntPtr.Zero)
+                {
+                    return new MaybeIntPtr(libraryPointer);
+                }
+
                 var exceptions = new List<Exception>();
 
-                var libraryPointer = NativeMethods.LoadLibraryEx(libraryPath, IntPtr.Zero, LoadLibraryFlags.LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LoadLibraryFlags.LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+                exceptions.Add(new Win32Exception());
+
+                libraryPointer = NativeMethods.LoadLibraryEx(libraryPath, IntPtr.Zero, LoadLibraryFlags.LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LoadLibraryFlags.LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
 
                 if (libraryPointer != IntPtr.Zero)
                 {
@@ -414,6 +654,160 @@ namespace Rock.Reflection
                 LOAD_LIBRARY_SEARCH_DEFAULT_DIRS = 0x00001000,
             }
         }
+
+        private class UnixLibraryLoader : ILibraryLoader
+        {
+            private static readonly string[] _candidateWritableLocations = new[] { "/tmp", "/var/tmp" };
+
+            private readonly bool _isMac;
+
+            public UnixLibraryLoader(bool isMac)
+            {
+                _isMac = isMac;
+            }
+
+            public string[] CandidateWritableLocations { get { return _candidateWritableLocations; } }
+
+            public IEnumerable<string> GetInstallPathCandidates(string libraryName)
+            {
+                var fullName = libraryName + (_isMac ? ".dylib" : ".so");
+
+                var assembly = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
+                var potentialInstallPath = Path.Combine(Path.GetDirectoryName(assembly.Location), fullName);
+                if (File.Exists(potentialInstallPath))
+                {
+                    yield return potentialInstallPath;
+                }
+
+                yield return fullName;
+            }
+
+            public MaybeIntPtr LoadLibrary(string libraryPath)
+            {
+                var libraryPointer = dlopen(libraryPath, dlopenFlags.RTLD_LAZY | dlopenFlags.RTLD_GLOBAL);
+
+                if (libraryPointer != IntPtr.Zero)
+                {
+                    return new MaybeIntPtr(libraryPointer);
+                }
+
+                var error = dlerror();
+                if (string.IsNullOrEmpty(error))
+                {
+                    error = "Null pointer was returned from dlopen.";
+                }
+                return new MaybeIntPtr(new[] { new Exception(error) });
+            }
+
+            public void FreeLibrary(IntPtr libraryPointer)
+            {
+                dlclose(libraryPointer);
+            }
+
+            public MaybeIntPtr GetFunctionPointer(IntPtr libraryPointer, string functionName)
+            {   
+                var functionPointer = dlsym(libraryPointer, functionName);
+
+                if (functionPointer != IntPtr.Zero)
+                {
+                    return new MaybeIntPtr(functionPointer);
+                }
+
+                return new MaybeIntPtr(new Exception[] { new Exception(dlerror()) });
+            }
+
+            private IntPtr dlopen(string filename, dlopenFlags flags) =>
+                 _isMac ? Mac.NativeMethods.dlopen(filename, flags) : Linux.NativeMethods.dlopen(filename, flags);
+
+            private string dlerror() =>
+                _isMac ? Mac.NativeMethods.dlerror() : Linux.NativeMethods.dlerror();
+
+            private IntPtr dlsym(IntPtr handle, string symbol) =>
+                _isMac ? Mac.NativeMethods.dlsym(handle, symbol) : Linux.NativeMethods.dlsym(handle, symbol);
+
+            private IntPtr dlclose(IntPtr handle) =>
+                _isMac ? Mac.NativeMethods.dlclose(handle) : Linux.NativeMethods.dlclose(handle);
+
+            private static class Mac
+            {
+                internal static class NativeMethods
+                {
+                    [DllImport("libSystem.dylib")]
+                    public static extern IntPtr dlopen(string filename, dlopenFlags flags);
+
+                    [DllImport("libSystem.dylib")]
+                    public static extern string dlerror();
+
+                    [DllImport("libSystem.dylib")]
+                    public static extern IntPtr dlsym(IntPtr handle, string symbol);
+
+                    [DllImport("libSystem.dylib")]
+                    public static extern IntPtr dlclose(IntPtr handle);
+                }
+            }
+
+            private static class Linux
+            {
+                internal static class NativeMethods
+                {// libdl.so libcoreclr.so
+                    [DllImport("libdl.so")]
+                    public static extern IntPtr dlopen(string filename, dlopenFlags flag);
+
+                    [DllImport("libdl.so")]
+                    public static extern string dlerror();
+
+                    [DllImport("libdl.so")]
+                    public static extern IntPtr dlsym(IntPtr handle, string name);
+
+                    [DllImport("libdl.so")]
+                    public static extern IntPtr dlclose(IntPtr handle);
+                }
+            }
+            
+            [Flags]
+            private enum dlopenFlags
+            {
+                RTLD_LAZY = 0x1,
+                RTLD_NOW = 0x2,
+                RTLD_LOCAL = 0x4,
+                RTLD_GLOBAL = 0x8,
+                RTLD_NOLOAD = 0x10,
+                RTLD_NODELETE = 0x80,
+            }
+        }
+
+        private class NullLibraryLoader : ILibraryLoader
+        {
+            private static readonly string[] _empty = new string[0];
+
+            public string[] CandidateWritableLocations
+            {
+                get { return _empty; }
+            }
+
+            public IEnumerable<string> GetInstallPathCandidates(string libraryName) { return _empty; }
+
+            public void FreeLibrary(IntPtr libraryPointer)
+            {
+            }
+
+            public MaybeIntPtr GetFunctionPointer(IntPtr libraryPointer, string functionName)
+            {
+                throw new NotImplementedException();
+            }
+
+            public MaybeIntPtr LoadLibrary(string libraryPath)
+            {
+                return new MaybeIntPtr(IntPtr.Zero);
+            }
+        }
+
+        private enum RuntimeOS
+        {
+            Windows,
+            Mac,
+            Linux
+        }
     }
 
     /// <summary>
@@ -422,11 +816,15 @@ namespace Rock.Reflection
     /// </summary>
     internal sealed class DllInfo
     {
+        private static readonly IReadOnlyCollection<string> _assemblyManifestResourceNames = typeof(DllInfo).GetTypeInfo().Assembly.GetManifestResourceNames().Select(n => n.ToLowerInvariant()).ToList().AsReadOnly();
+
+        private readonly TargetRuntime _targetRuntime;
         private readonly string _resourceName;
         private readonly string[] _additionalResourceNames;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="DllInfo"/> class.
+        /// Initializes a new instance of the <see cref="DllInfo"/> class, assuming the target runtime to be
+        /// <see cref="TargetRuntime.Windows"/>.
         /// </summary>
         /// <param name="resourceName">The resource name of the main DLL to be loaded.</param>
         /// <param name="additionalResourceNames">
@@ -438,14 +836,48 @@ namespace Rock.Reflection
         /// <exception cref="ArgumentException">
         /// <paramref name="resourceName"/> is empty.
         /// or
+        /// <paramref name="resourceName"/> is not found in this assembly's manifest resource names.
+        /// or
         /// <paramref name="additionalResourceNames"/> has any null elements.
         /// or
         /// <paramref name="additionalResourceNames"/> has any empty elements.
+        /// or
+        /// <paramref name="additionalResourceNames"/> has any elements that are not found in this assembly's manifest resource names.
         /// </exception>
         public DllInfo(string resourceName, params string[] additionalResourceNames)
+            : this(TargetRuntime.Windows, resourceName, additionalResourceNames)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="DllInfo"/> class.
+        /// </summary>
+        /// <param name="targetRuntime">The runtime that this <see cref="DllInfo"/> targets.</param>
+        /// <param name="resourceName">The resource name of the main DLL to be loaded.</param>
+        /// <param name="additionalResourceNames">
+        /// The resource names of any additional DLLs that neede to be loaded.
+        /// </param>
+        /// <exception cref="ArgumentNullException">
+        /// <paramref name="resourceName"/> is null.
+        /// </exception>
+        /// <exception cref="ArgumentException">
+        /// <paramref name="resourceName"/> is empty.
+        /// or
+        /// <paramref name="resourceName"/> is not found in this assembly's manifest resource names.
+        /// or
+        /// <paramref name="additionalResourceNames"/> has any null elements.
+        /// or
+        /// <paramref name="additionalResourceNames"/> has any empty elements.
+        /// or
+        /// <paramref name="additionalResourceNames"/> has any elements that are not found in this assembly's manifest resource names.
+        /// </exception>
+        public DllInfo(TargetRuntime targetRuntime, string resourceName, params string[] additionalResourceNames)
         {
             if (resourceName == null) throw new ArgumentNullException("resourceName");
             if (resourceName == "") throw new ArgumentException("'resourceName' must not be empty.", "resourceName");
+            if (!_assemblyManifestResourceNames.Contains(resourceName.ToLowerInvariant()))
+                throw new ArgumentException(string.Format("Resource '{0}' was not found in the assembly manifest resource names: {1}",
+                    resourceName, string.Join(", ", _assemblyManifestResourceNames.Select(n => "'" + n + "'"))), "resourceName");
 
             if (additionalResourceNames != null)
             {
@@ -453,11 +885,23 @@ namespace Rock.Reflection
                 {
                     if (additionalResourceName == null) throw new ArgumentException("Elements of 'additionalResourceNames' must not be null.", "additionalResourceNames");
                     if (additionalResourceName == "") throw new ArgumentException("Elements of 'additionalResourceNames' must not be empty.", "additionalResourceNames");
+                    if (!_assemblyManifestResourceNames.Contains(additionalResourceName.ToLowerInvariant()))
+                        throw new ArgumentException(string.Format("Additional resource '{0}' was not found in the assembly manifest resource names: {1}",
+                            additionalResourceName, string.Join(", ", _assemblyManifestResourceNames.Select(n => "'" + n + "'"))), "additionalResourceNames");
                 }
             }
 
+            _targetRuntime = targetRuntime;
             _resourceName = resourceName;
             _additionalResourceNames = additionalResourceNames ?? new string[0];
+        }
+
+        /// <summary>
+        /// Gets the runtime that this <see cref="DllInfo"/> targets.
+        /// </summary>
+        public TargetRuntime TargetRuntime
+        {
+            get { return _targetRuntime; }
         }
 
         /// <summary>
@@ -478,27 +922,33 @@ namespace Rock.Reflection
     }
 
     /// <summary>
-    /// An exception thrown when a problem is encountered when loading a native library or
-    /// a native library's function.
+    /// Defines the target runtimes that are supported by the <see cref="DllInfo"/> class.
     /// </summary>
-    public sealed class EmbeddedNativeLibraryException : AggregateException
+    internal enum TargetRuntime
     {
         /// <summary>
-        /// Initializes a new instance of the <see cref="EmbeddedNativeLibraryException"/> class
-        /// with a specified error message and references to the inner exceptions that are the
-        /// cause of this exception. 
+        /// A windows environment. Whether it is 32-bit or 64-bit is unspecified.
         /// </summary>
-        /// <param name="message">The error message that explains the reason for the exception.</param>
-        /// <param name="exceptions">The exceptions that are the cause of the current exception.</param>
-        /// <exception cref="ArgumentNullException">
-        /// <paramref name="exceptions"/> argument is null.
-        /// </exception>
-        /// <exception cref="ArgumentException">
-        /// <paramref name="exceptions"/> has any null elements.
-        /// </exception>
-        internal EmbeddedNativeLibraryException(string message, params Exception[] exceptions)
-            : base(message, exceptions)
-        {
-        }
+        Windows,
+
+        /// <summary>
+        /// A windows 32-bit environment.
+        /// </summary>
+        Win32,
+
+        /// <summary>
+        /// A Windows 64-bit environment.
+        /// </summary>
+        Win64,
+
+        /// <summary>
+        /// A Mac environment.
+        /// </summary>
+        Mac,
+
+        /// <summary>
+        /// A Linux environment.
+        /// </summary>
+        Linux,
     }
 }
