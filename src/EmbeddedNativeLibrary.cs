@@ -323,7 +323,7 @@ namespace RockLib.Interop
                 case RuntimeOS.Linux:
                     return new UnixLibraryLoader(false);
                 default:
-                    return new NullLibraryLoader();
+                    throw new ArgumentOutOfRangeException(nameof(os));
             }
         }
 
