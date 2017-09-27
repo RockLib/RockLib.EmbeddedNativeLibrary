@@ -9,6 +9,26 @@
     <Import_RootNamespace>Rock.EmbeddedNativeLibrary.Shared</Import_RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)DllInfo.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)EmbeddedNativeLibrary.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)RuntimeOS.cs">
+      <DependentUpon>EmbeddedNativeLibrary.cs</DependentUpon>
+    </Compile>
+    <Compile Include="$(MSBuildThisFileDirectory)ILibraryLoader.cs">
+      <DependentUpon>EmbeddedNativeLibrary.cs</DependentUpon>
+    </Compile>
+    <Compile Include="$(MSBuildThisFileDirectory)MaybeIntPtr.cs">
+      <DependentUpon>EmbeddedNativeLibrary.cs</DependentUpon>
+    </Compile>
+    <Compile Include="$(MSBuildThisFileDirectory)NullLibraryLoader.cs">
+      <DependentUpon>EmbeddedNativeLibrary.cs</DependentUpon>
+    </Compile>
+    <Compile Include="$(MSBuildThisFileDirectory)TargetRuntime.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)WindowsLibraryLoader.cs">
+      <DependentUpon>EmbeddedNativeLibrary.cs</DependentUpon>
+    </Compile>
+    <Compile Include="$(MSBuildThisFileDirectory)UnixLibraryLoader.cs">
+      <DependentUpon>EmbeddedNativeLibrary.cs</DependentUpon>
+    </Compile>
   </ItemGroup>
 </Project>
