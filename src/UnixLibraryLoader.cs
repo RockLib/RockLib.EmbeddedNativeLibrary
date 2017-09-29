@@ -25,7 +25,7 @@ namespace RockLib.Interop
             {
                 var fullName = libraryName + (_isMac ? ".dylib" : ".so");
 
-                var assembly = Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly();
+                var assembly = Assembly.GetEntryAssembly() ?? typeof(UnixLibraryLoader).GetTypeInfo().Assembly;
                 var potentialInstallPath = Path.Combine(Path.GetDirectoryName(assembly.Location), fullName);
                 if (File.Exists(potentialInstallPath))
                 {
