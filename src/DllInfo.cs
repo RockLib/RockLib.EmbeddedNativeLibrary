@@ -11,7 +11,7 @@ namespace RockLib.Interop
     /// </summary>
     internal sealed class DllInfo
     {
-        private static readonly IReadOnlyCollection<string> _assemblyManifestResourceNames = typeof(DllInfo).GetTypeInfo().Assembly.GetManifestResourceNames().Select(n => n.ToLowerInvariant()).ToList().AsReadOnly();
+        private static readonly IReadOnlyCollection<string> _assemblyManifestResourceNames = typeof(DllInfo).GetTypeInfo().Assembly.GetManifestResourceNames().ToList().AsReadOnly();
 
         private readonly TargetRuntime _targetRuntime;
         private readonly string _resourceName;
@@ -70,7 +70,7 @@ namespace RockLib.Interop
         {
             if (resourceName == null) throw new ArgumentNullException("resourceName");
             if (resourceName == "") throw new ArgumentException("'resourceName' must not be empty.", "resourceName");
-            if (!_assemblyManifestResourceNames.Contains(resourceName.ToLowerInvariant()))
+            if (!_assemblyManifestResourceNames.Contains(resourceName))
                 throw new ArgumentException(string.Format("Resource '{0}' was not found in the assembly manifest resource names: {1}",
                     resourceName, string.Join(", ", _assemblyManifestResourceNames.Select(n => "'" + n + "'"))), "resourceName");
 
@@ -80,7 +80,7 @@ namespace RockLib.Interop
                 {
                     if (additionalResourceName == null) throw new ArgumentException("Elements of 'additionalResourceNames' must not be null.", "additionalResourceNames");
                     if (additionalResourceName == "") throw new ArgumentException("Elements of 'additionalResourceNames' must not be empty.", "additionalResourceNames");
-                    if (!_assemblyManifestResourceNames.Contains(additionalResourceName.ToLowerInvariant()))
+                    if (!_assemblyManifestResourceNames.Contains(additionalResourceName))
                         throw new ArgumentException(string.Format("Additional resource '{0}' was not found in the assembly manifest resource names: {1}",
                             additionalResourceName, string.Join(", ", _assemblyManifestResourceNames.Select(n => "'" + n + "'"))), "additionalResourceNames");
                 }
