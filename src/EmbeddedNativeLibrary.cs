@@ -269,7 +269,7 @@ namespace RockLib.Interop
                     maybePointer.Exceptions);
             }
 
-#if NET40
+#if BEFORE_NET451
             return (TDelegate)(object)Marshal.GetDelegateForFunctionPointer(maybePointer.Value, typeof(TDelegate));
 #else
             return Marshal.GetDelegateForFunctionPointer<TDelegate>(maybePointer.Value);
