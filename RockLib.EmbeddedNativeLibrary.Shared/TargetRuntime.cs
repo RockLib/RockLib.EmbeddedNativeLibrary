@@ -3,7 +3,11 @@
     /// <summary>
     /// Defines the target runtimes that are supported by the <see cref="DllInfo"/> class.
     /// </summary>
+#if ROCKLIB_EMBEDDEDNATIVELIBRARY
+    public enum TargetRuntime
+#else
     internal enum TargetRuntime
+#endif
     {
         /// <summary>
         /// A windows environment. Whether it is 32-bit or 64-bit is unspecified.

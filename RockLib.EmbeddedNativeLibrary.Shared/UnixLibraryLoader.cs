@@ -25,7 +25,7 @@ namespace RockLib.Interop
             {
                 var fullName = libraryName + (_isMac ? ".dylib" : ".so");
 
-                var assembly = Assembly.GetEntryAssembly() ?? typeof(UnixLibraryLoader).GetTypeInfo().Assembly;
+                var assembly = Assembly.GetEntryAssembly() ?? typeof(UnixLibraryLoader).Assembly;
                 var potentialInstallPath = Path.Combine(Path.GetDirectoryName(assembly.Location), fullName);
                 if (File.Exists(potentialInstallPath))
                 {
@@ -70,17 +70,25 @@ namespace RockLib.Interop
             }
 
 #pragma warning disable IDE1006 // Naming Styles
-            private IntPtr dlopen(string filename, dlopenFlags flags) =>
-                 _isMac ? Mac.NativeMethods.dlopen(filename, flags) : Linux.NativeMethods.dlopen(filename, flags);
+            private IntPtr dlopen(string filename, dlopenFlags flags)
+            {
+                return _isMac ? Mac.NativeMethods.dlopen(filename, flags) : Linux.NativeMethods.dlopen(filename, flags);
+            }
 
-            private string dlerror() =>
-                _isMac ? Mac.NativeMethods.dlerror() : Linux.NativeMethods.dlerror();
+            private string dlerror()
+            {
+                return _isMac ? Mac.NativeMethods.dlerror() : Linux.NativeMethods.dlerror();
+            }
 
-            private IntPtr dlsym(IntPtr handle, string symbol) =>
-                _isMac ? Mac.NativeMethods.dlsym(handle, symbol) : Linux.NativeMethods.dlsym(handle, symbol);
+            private IntPtr dlsym(IntPtr handle, string symbol)
+            {
+                return _isMac ? Mac.NativeMethods.dlsym(handle, symbol) : Linux.NativeMethods.dlsym(handle, symbol);
+            }
 
-            private IntPtr dlclose(IntPtr handle) =>
-                _isMac ? Mac.NativeMethods.dlclose(handle) : Linux.NativeMethods.dlclose(handle);
+            private IntPtr dlclose(IntPtr handle)
+            {
+                return _isMac ? Mac.NativeMethods.dlclose(handle) : Linux.NativeMethods.dlclose(handle);
+            }
 
             private static class Mac
             {

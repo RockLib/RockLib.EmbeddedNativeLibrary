@@ -1,7 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
-using System.Reflection;
 
 namespace RockLib.Interop
 {
@@ -9,9 +8,13 @@ namespace RockLib.Interop
     /// Contains resource names for the DLLs that are embedded in this assembly. The DLLs
     /// must all be of the same architecture (x86 or x64).
     /// </summary>
+#if ROCKLIB_EMBEDDEDNATIVELIBRARY
+    public sealed class DllInfo
+#else
     internal sealed class DllInfo
+#endif
     {
-        private static readonly IReadOnlyCollection<string> _assemblyManifestResourceNames = typeof(DllInfo).GetTypeInfo().Assembly.GetManifestResourceNames().ToList().AsReadOnly();
+        private static readonly ReadOnlyCollection<string> _assemblyManifestResourceNames = typeof(DllInfo).Assembly.GetManifestResourceNames().ToList().AsReadOnly();
 
         private readonly TargetRuntime _targetRuntime;
         private readonly string _resourceName;
@@ -19,7 +22,7 @@ namespace RockLib.Interop
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DllInfo"/> class, assuming the target runtime to be
-        /// <see cref="TargetRuntime.Windows"/>.
+        /// <see cref="Interop.TargetRuntime.Windows"/>.
         /// </summary>
         /// <param name="resourceName">The resource name of the main DLL to be loaded.</param>
         /// <param name="additionalResourceNames">

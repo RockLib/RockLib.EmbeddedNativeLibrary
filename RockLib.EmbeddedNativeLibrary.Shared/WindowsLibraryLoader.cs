@@ -43,7 +43,7 @@ namespace RockLib.Interop
             {
                 var fullName = libraryName + ".dll";
 
-                var assembly = Assembly.GetEntryAssembly() ?? typeof(WindowsLibraryLoader).GetTypeInfo().Assembly;
+                var assembly = Assembly.GetEntryAssembly() ?? typeof(WindowsLibraryLoader).Assembly;
                 var potentialInstallPath = Path.Combine(Path.GetDirectoryName(assembly.Location), fullName);
                 if (File.Exists(potentialInstallPath))
                 {

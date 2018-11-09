@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -16,7 +15,11 @@ namespace RockLib.Interop
     /// embedded as a resource in the same assembly that <see cref="EmbeddedNativeLibrary"/>
     /// is defined.
     /// </summary>
+#if ROCKLIB_EMBEDDEDNATIVELIBRARY
+    public sealed partial class EmbeddedNativeLibrary : IDisposable
+#else
     internal sealed partial class EmbeddedNativeLibrary : IDisposable
+#endif
     {
         private const bool _defaultPreferEmbeddedOverInstalled = true;
 
@@ -51,7 +54,7 @@ namespace RockLib.Interop
         {
             if (dllInfos != null && dllInfos.Any(info => info.TargetRuntime == TargetRuntime.Linux || info.TargetRuntime == TargetRuntime.Mac))
             {
-                throw new ArgumentException($"Embedding a Mac or Linux native library is not supported with the {nameof(Load)} method: one or more {nameof(DllInfo)} object had a {nameof(DllInfo.TargetRuntime)} with a non-windows value.", nameof(dllInfos));
+                throw new ArgumentException("Embedding a Mac or Linux native library is not supported with the Load method: one or more DllInfo object had a TargetRuntime with a non-windows value.", "dllInfos");
             }
 
             if (_runtimeOS != RuntimeOS.Windows)
@@ -170,7 +173,7 @@ namespace RockLib.Interop
                 {
                     return maybePointer.Value;
                 }
-                
+
                 exceptions.Add(new AggregateException(
                     string.Format(
                         "The load library operation for '{0}' failed and reported {1} exception{2}.",
@@ -310,7 +313,7 @@ namespace RockLib.Interop
             if (functionName == null) throw new ArgumentNullException("functionName");
             if (functionName == "") throw new ArgumentException("'functionName' must not be empty.", "functionName");
 
-            if (!typeof(Delegate).GetTypeInfo().IsAssignableFrom(typeof(TDelegate)))
+            if (!typeof(Delegate).IsAssignableFrom(typeof(TDelegate)))
             {
                 throw new InvalidOperationException("TDelegate must be a delegate.");
             }
@@ -327,7 +330,7 @@ namespace RockLib.Interop
                 case RuntimeOS.Linux:
                     return new UnixLibraryLoader(false);
                 default:
-                    throw new ArgumentOutOfRangeException(nameof(os));
+                    throw new ArgumentOutOfRangeException("os");
             }
         }
 
@@ -462,7 +465,7 @@ namespace RockLib.Interop
 
         private static byte[] LoadResource(string resourceName)
         {
-            var stream = typeof(EmbeddedNativeLibrary).GetTypeInfo().Assembly.GetManifestResourceStream(resourceName);
+            var stream = typeof(EmbeddedNativeLibrary).Assembly.GetManifestResourceStream(resourceName);
 
             if (stream == null)
             {
