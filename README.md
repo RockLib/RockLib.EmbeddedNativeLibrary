@@ -1,10 +1,10 @@
-Rock.EmbeddedNativeLibrary
+RockLib.EmbeddedNativeLibrary
 ==========================
 
-Consuming third-party native DLLs (usually C libraries) can be tricky in .NET - especially when your project is deployed as a NuGet package. The Rock.EmbeddedNativeLibrary NuGet package makes this sort of native interop easy.
+Consuming third-party native DLLs (usually C libraries) can be tricky in .NET - especially when your project is deployed as a NuGet package. The RockLib.EmbeddedNativeLibrary NuGet package makes this sort of native interop easy.
 
 ```
-PM> Install-Package Rock.EmbeddedNativeLibrary
+PM> Install-Package RockLib.EmbeddedNativeLibrary
 ```
 
 Problem
@@ -24,7 +24,7 @@ Since the native DLL cannot be referenced by a .NET project, it isn't recognized
 Solution
 --------
 
-1. Add the `Rock.EmbeddedNativeLibrary` nuget package to your project.
+1. Add the `RockLib.EmbeddedNativeLibrary` nuget package to your project.
 2. Add the native DLL to the project as an [embedded resource](https://support.microsoft.com/en-us/kb/319292).
 3. Create an instance of `EmbeddedNativeLibrary`, and call its `GetDelegate` method to obtain a delegate that invokes that native function.
 

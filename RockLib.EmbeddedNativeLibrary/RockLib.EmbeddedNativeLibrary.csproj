@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;netstandard1.6;net45;</TargetFrameworks>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageId>RockLib.EmbeddedNativeLibrary</PackageId>
+    <PackageVersion>1.1.2</PackageVersion>
+    <Authors>Quicken Loans</Authors>
+    <Description>Consume native libraries from .NET by adding as embedded resources.</Description>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageReleaseNotes></PackageReleaseNotes>
+    <Copyright>Copyright 2017 (c) Quicken Loans Corporation. All rights reserved.</Copyright>
+    <PackageTags>rocklib embedded native library</PackageTags>
+    <Version>1.1.0</Version>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)'=='net45'">
+    <DefineConstants>BEFORE_NET451</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <DocumentationFile>bin\$(Configuration)\$(TargetFramework)\RockLib.EmbeddedNativeLibrary.xml</DocumentationFile>
+  </PropertyGroup>
+
+  <Import Project="..\RockLib.EmbeddedNativeLibrary.Shared\RockLib.EmbeddedNativeLibrary.Shared.projitems" Label="Shared" />
+
+</Project>
