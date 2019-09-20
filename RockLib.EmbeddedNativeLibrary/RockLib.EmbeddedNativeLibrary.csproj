@@ -7,7 +7,7 @@
   <PropertyGroup>
     <PackageId>RockLib.EmbeddedNativeLibrary</PackageId>
     <PackageVersion>2.0.2</PackageVersion>
-    <Authors>Quicken Loans</Authors>
+    <Authors>Brian Friesen</Authors>
     <Description>Consume native libraries from .NET by adding as embedded resources.</Description>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageReleaseNotes></PackageReleaseNotes>
