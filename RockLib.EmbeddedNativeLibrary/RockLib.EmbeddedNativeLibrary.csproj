@@ -10,11 +10,14 @@
     <Authors>Brian Friesen</Authors>
     <Description>Consume native libraries from .NET by adding as embedded resources.</Description>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-    <PackageReleaseNotes></PackageReleaseNotes>
-    <Copyright>Copyright 2015-2018 (c) Quicken Loans Corporation. All rights reserved.</Copyright>
+    <PackageReleaseNotes>A changelog is available at https://github.com/RockLib/RockLib.EmbeddedNativeLibrary/blob/main/RockLib.EmbeddedNativeLibrary/CHANGELOG.md.</PackageReleaseNotes>
+    <Copyright>Copyright 2015-2021 (c) Quicken Loans Corporation. All rights reserved.</Copyright>
     <PackageTags>rocklib embedded native library</PackageTags>
     <Version>2.0.0</Version>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <PublishRepositoryUrl>True</PublishRepositoryUrl>
+    <EmbedUntrackedSources>True</EmbedUntrackedSources>
+    <DebugType>Embedded</DebugType>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(TargetFramework)'!='net40'">
@@ -26,10 +29,18 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <DocumentationFile>bin\$(Configuration)\$(TargetFramework)\RockLib.EmbeddedNativeLibrary.xml</DocumentationFile>
+    <DocumentationFile>bin\$(Configuration)\$(TargetFramework)\$(PackageId).xml</DocumentationFile>
     <LangVersion>3</LangVersion>
   </PropertyGroup>
+  
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+  </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.0.0" PrivateAssets="All"/>
+  </ItemGroup>
+  
   <Import Project="..\RockLib.EmbeddedNativeLibrary.Shared\RockLib.EmbeddedNativeLibrary.Shared.projitems" Label="Shared" />
 
 </Project>

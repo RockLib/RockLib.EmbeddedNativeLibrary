@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.26730.12
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.31205.134
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RockLib.EmbeddedNativeLibrary", "RockLib.EmbeddedNativeLibrary\RockLib.EmbeddedNativeLibrary.csproj", "{F41993CE-A758-4B5C-A1CF-98553D02E697}"
 EndProject
@@ -10,7 +10,7 @@ EndProject
 Global
 	GlobalSection(SharedMSBuildProjectFiles) = preSolution
 		RockLib.EmbeddedNativeLibrary.Shared\RockLib.EmbeddedNativeLibrary.Shared.projitems*{c1116d49-42af-4045-a1dc-090a4f2f9ff5}*SharedItemsImports = 13
-		RockLib.EmbeddedNativeLibrary\RockLib.EmbeddedNativeLibrary.Shared.projitems*{f41993ce-a758-4b5c-a1cf-98553d02e697}*SharedItemsImports = 4
+		RockLib.EmbeddedNativeLibrary.Shared\RockLib.EmbeddedNativeLibrary.Shared.projitems*{f41993ce-a758-4b5c-a1cf-98553d02e697}*SharedItemsImports = 5
 	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
