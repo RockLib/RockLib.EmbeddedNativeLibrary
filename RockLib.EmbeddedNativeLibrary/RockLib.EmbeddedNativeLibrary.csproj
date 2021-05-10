@@ -6,7 +6,7 @@
 
   <PropertyGroup>
     <PackageId>RockLib.EmbeddedNativeLibrary</PackageId>
-    <PackageVersion>2.0.2</PackageVersion>
+    <PackageVersion>2.0.3</PackageVersion>
     <Authors>Brian Friesen</Authors>
     <Description>Consume native libraries from .NET by adding as embedded resources.</Description>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
