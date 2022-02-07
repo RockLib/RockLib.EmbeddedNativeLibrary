@@ -70,7 +70,6 @@ namespace RockLib.Interop
             return new MaybeIntPtr(new Exception[] { new GetFunctionPointerException(dlerror()) });
          }
 
-#pragma warning disable IDE1006 // Naming Styles
          private IntPtr dlopen(string filename, dlopenFlags flags)
          {
             return _isMac ? Mac.NativeMethods.dlopen(filename, flags) : Linux.NativeMethods.dlopen(filename, flags);
@@ -145,7 +144,6 @@ namespace RockLib.Interop
             RTLD_NOLOAD = 0x10,
             RTLD_NODELETE = 0x80,
          }
-#pragma warning restore IDE1006 // Naming Styles
       }
    }
 }
